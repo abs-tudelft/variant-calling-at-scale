@@ -1,0 +1,173 @@
+BootStrap: debootstrap
+OSVersion: bionic
+MirrorURL: http://us.archive.ubuntu.com/ubuntu/
+
+
+%runscript
+    echo "This is what happens when you run the container..."
+    /home/tahmad/bulk/images/adam.sh
+
+%post
+    echo "Hello from inside the container"
+    sed -i 's/$/ universe/' /etc/apt/sources.list
+    apt-get update
+    apt-get -y install vim
+    apt-get -y update
+    apt-get -y upgrade
+    apt-get -y dist-upgrade
+    apt-get -y install vim
+    apt-get install -y curl
+    apt-get install cmake -y
+    apt-get update; apt-get install python-pip -y
+    pip install ray
+    pip install psutil
+    apt-get install -y software-properties-common
+    #apt-get install add-apt-repository
+    add-apt-repository ppa:chris-lea/redis-server
+    apt-get update
+    apt-get install flex bison -y
+    apt-get install libboost-all-dev -y 
+    apt-get install redis-server -y
+    apt-get install openmpi-bin -y
+    #apt-get install libcr-dev mpich2 mpich2-doc
+    apt-get install libsnappy-dev -y
+    apt-get update && apt-get install -y python3
+    apt-get update && apt install -y python-pip
+    apt-get update && pip install pyarrow
+    apt-get update && pip install pandas
+    apt-get update && apt install -y maven
+    apt-get update && apt-get install -y openjdk-8-jre
+    apt-get update && apt-get install -y openjdk-8-jdk
+    echo 2 | update-alternatives --config java    
+    #apt-get update && apt-get install -y default-jre
+    #apt-get update && apt-get install -y default-jdk
+    apt-get update && apt-get install -y gtk-doc-tools
+    apt-get update && apt-get install -y libglib2.0-dev
+    apt-get update && apt-get install -y libtool-bin
+    apt-get update && apt-get install -y autoconf
+    apt-get update && apt-get install -y autoconf-archive
+    apt-get update && apt-get install -y libgirepository1.0-dev
+    apt-get update && apt-get install -y sshfs
+    apt-get update && apt-get install sysstat -y
+    apt-get update && apt-get install dstat
+    apt-get update && apt install -y git
+    apt-get update && apt-get install -y linux-tools-generic
+    apt-get install ca-certificates-java 
+    apt-get install sed
+    apt-get install wget
+
+
+    #apt-get install --reinstall -y systemd
+    #apt install -y git gcc g++ autoconf automake asciidoc asciidoctor bash-completion xmlto libtool pkg-config libglib2.0-0 libglib2.0-dev libfabric1 libfabric-dev doxygen graphviz pandoc libncurses5 libkmod2 libkmod-dev libudev-dev uuid-dev libjson-c-dev libkeyutils-dev
+    #rm -r ndctl
+    #git clone https://github.com/pmem/ndctl
+    #cd ndctl
+    #./autogen.sh
+    #./configure CFLAGS='-g -O2' --prefix=/usr/local --sysconfdir=/etc --libdir=/usr/local/lib64
+    #make
+    #make install
+    
+    #export PKG_CONFIG_PATH=/usr/local/lib64/pkgconfig:/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH}
+    ##rm -r pmdk
+    #git clone https://github.com/pmem/pmdk
+    #cd pmdk
+    #make
+    #make install
+
+    apt-get install ocl-icd-* opencl-headers -y
+    apt-get install scala -y
+
+    echo "deb https://dl.bintray.com/sbt/debian /" | tee -a /etc/apt/sources.list.d/sbt.list
+    curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2EE0EA64E40A89B84B2DF73499E82A75642AC823" | apt-key add
+    apt-get update
+    apt-get install sbt
+
+    #git clone https://github.com/lh3/bwa.git
+    #cd bwa
+    #make
+    #mv bwa /usr/local/bin
+    
+    #curl -O https://downloads.apache.org/spark/spark-2.4.5/spark-2.4.5-bin-hadoop2.7.tgz
+    #tar xvf spark-2.4.5-bin-hadoop2.7.tgz
+    #mv spark-2.4.5-bin-hadoop2.7/ /opt/spark 
+
+    #curl -O https://archive.apache.org/dist/spark/spark-3.0.0/spark-3.0.0-bin-hadoop2.7.tgz
+    #tar xvf spark-3.0.0-bin-hadoop2.7.tgz
+    #rm spark-3.0.0-bin-hadoop2.7.tgz
+    #mv spark-3.0.0-bin-hadoop2.7/ /opt/spark
+
+    #git clone https://github.com/bigdatagenomics/adam.git
+    #cd adam
+    #mvn install -Djavax.net.ssl.trustStorePassword=changeit 
+   
+    #curl -O https://repo1.maven.org/maven2/org/bdgenomics/adam/adam-distribution-spark2_2.12/0.28.0/adam-distribution-spark2_2.12-0.28.0-bin.tar.gz 
+    #tar xvf adam-distribution-spark2_2.12-0.28.0-bin.tar.gz
+    #mv adam-distribution-spark2_2.12-0.28.0/ /opt/adam 
+
+   
+    #git clone https://github.com/heuermh/adam-commands.git
+    #cd adam-commands
+    #mvn install -Djavax.net.ssl.trustStorePassword=changeit
+    
+    #issue!
+    #git clone https://github.com/heuermh/adam-examples.git
+    #cd adam-examples
+    #mvn install -Djavax.net.ssl.trustStorePassword=changeit # for trustAnchors exception 
+
+    #git clone https://github.com/bigdatagenomics/cannoli.git
+    #cd cannoli
+    #mvn install -Djavax.net.ssl.trustStorePassword=changeit      
+
+    #rm -r arrow/
+    #git clone https://github.com/apache/arrow.git
+    #git clone --single-branch --branch maint-0.12.x https://github.com/tahashmi/arrow.git
+    ##git clone https://github.com/tahashmi/arrow.git
+    #sed -i '606 s/^/#/'  arrow/cpp/src/arrow/CMakeLists.txt  
+    #cd arrow
+    ##git checkout -b maint-0.12.x
+    #cd cpp
+    #mkdir release
+    #cd release
+    ##cd arrow/cpp/release
+    #cmake .. -DCMAKE_BUILD_TYPE=Release -DARROW_PARQUET=ON -DARROW_PLASMA=ON -DARROW_PLASMA_JAVA_CLIENT=ON -DARROW_PYTHON=ON
+    #make install
+
+    
+    
+    #cd /arrow/java
+    #git submodule update --init --recursive # Needed for flight
+    #mvn install -Djavax.net.ssl.trustStorePassword=changeit
+
+    #cd /arrow/c_glib
+    #./autogen.sh
+    #sed -i '16688 s/^/#/' configure 
+    #./configure
+    #make
+    #make install
+
+    apt-get clean
+
+%environment
+    
+    export SPARK_HOME=/opt/spark
+    export PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+
+    #export ADAM_HOME=/opt/adam
+    #export PATH=$PATH:$ADAM_HOME/bin:$ADAM_HOME/bin
+
+    export PATH=$PATH:/usr/local/bin
+    JAVA_HOME=/usr/bin/java
+    #export TOOLS_PREFIX='/usr/local'
+    export GCC_VERSION='5.5.0'
+    export BOOST_VERSION='1_67_0'
+    export CPATH='/usr/local/include:/usr/lib'
+    export PKG_CONFIG_PATH='/usr/local/lib/pkgconfig'
+    export LD_LIBRARY_PATH='/usr/lib:/usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/lib/x86_64-linux-gnu/openmpi/lib'
+    #export PATH=$TOOLS_PREFIX/bin:$PATH
+    #echo $LD_LIBRARY_PATH
+
+
+    
+
+    #sudo singularity build --sandbox bionic Singularity
+    #sudo singularity build bionic.simg bionic
