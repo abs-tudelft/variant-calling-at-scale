@@ -21,5 +21,3 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
 3. Now enter into generated image using command:
          
         sudo singularity shell <image_name>.simg
-
-## How to run
