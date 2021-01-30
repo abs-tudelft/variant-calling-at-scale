@@ -10,6 +10,10 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
  - [Python libraries](https://github.com/apache/arrow/tree/master/python)
 
 ## Installation Requirements
+ - Ubuntu 16.04/18.04
+ - Apache Spark 3.0.1
+
+## Configuration & Build
 
 
 ## How to run 
