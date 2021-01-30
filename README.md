@@ -4,6 +4,7 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
 
 ## Apache Arrow Dependencies
  - [C++ libraries](https://github.com/apache/arrow/tree/master/cpp)
+ - [C bindings using GLib](https://github.com/apache/arrow/tree/master/c_glib)
  - [Plasma Object Store](https://github.com/apache/arrow/tree/master/cpp/src/plasma): a
    shared-memory blob store, part of the C++ codebase
  - [Python libraries](https://github.com/apache/arrow/tree/master/python)
