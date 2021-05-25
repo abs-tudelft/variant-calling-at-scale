@@ -89,8 +89,7 @@ FASTQ data is streamed to BWA on every cluster node, BWA output is piped into Sa
 2. Create a network-attached storage system which can be used with Google Compute Engine instances. Storage -> Filestore `->` Give any name like "fs" {instance id/name}, "fs-shared" {file shared name} `->` Create
 3. Perfrom the following [steps](https://github.com/abs-tudelft/SVCall/blob/main/README.md#setting-up-gcp-dataproc-cluster) to make GCP DataProc cluster ready to run this workflow.
 4. Upload script file to your bucket
-5. Run the following commands:
-o a different project.
+5. Run the following commands in GCP console shell:
 
-    taha_ahmad_pk_101@cloudshell:~ (organic-poetry-309513)$ gcloud dataproc jobs submit pyspark --region=us-central1 --cluster=cluster-555  --     properties=spark.pyspark.python=/usr/bin/python3.6,spark.pyspark.driver.python=/usr/bin/python3.6,spark.executor.memory=2G,spark.driver.memory=2G,spark.num.executors=2,spark.executor.cores=8  gs://bucket_taha_pk/scripts/bwa-standalone.py -- --markdup yes --ref /mnt/fs_shared/reference/GRCh38.fa  --path /mnt/fs_shared/query/ERR001268/  --nodes 2 --cores 8 --aligner BWA
+       taha_ahmad_pk_101@cloudshell:~ (organic-poetry-309513)$ gcloud dataproc jobs submit pyspark --region=us-central1 --cluster=cluster-555  --     properties=spark.pyspark.python=/usr/bin/python3.6,spark.pyspark.driver.python=/usr/bin/python3.6,spark.executor.memory=2G,spark.driver.memory=2G,spark.num.executors=2,spark.executor.cores=8  gs://bucket_taha_pk/scripts/bwa-standalone.py -- --markdup yes --ref /mnt/fs_shared/reference/GRCh38.fa  --path /mnt/fs_shared/query/ERR001268/  --nodes 2 --cores 8 --aligner BWA
     
