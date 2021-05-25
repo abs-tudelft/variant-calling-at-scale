@@ -93,5 +93,5 @@ FASTQ data is streamed to BWA on every cluster node, BWA output is piped into Sa
 o a different project.
 
 
-    taha_ahmad_pk_101@cloudshell:~ (organic-poetry-309513)$ gcloud dataproc jobs submit pyspark --region=us-central1 --cluster=cluster-555  --properties=spark.pyspark.python=/usr/bin/python3.6,spark.pyspark.driver.python=/usr/bin/python3.6,spark.executor.memory=2G,spark.driver.memory=2G,spark.num.executors=2,spark.executor.cores=8  gs://bucket_taha_pk/scripts/bwa-standalone.py -- --markdup yes --ref /mnt/fs_shared/reference/GRCh38.fa  --path /mnt/fs_shared/query/ERR001268/  --nodes 2 --cores 8 --aligner BWA
+`taha_ahmad_pk_101@cloudshell:~ (organic-poetry-309513)$ gcloud dataproc jobs submit pyspark --region=us-central1 --cluster=cluster-555  --properties=spark.pyspark.python=/usr/bin/python3.6,spark.pyspark.driver.python=/usr/bin/python3.6,spark.executor.memory=2G,spark.driver.memory=2G,spark.num.executors=2,spark.executor.cores=8  gs://bucket_taha_pk/scripts/bwa-standalone.py -- --markdup yes --ref /mnt/fs_shared/reference/GRCh38.fa  --path /mnt/fs_shared/query/ERR001268/  --nodes 2 --cores 8 --aligner BWA`
     
