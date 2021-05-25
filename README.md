@@ -22,16 +22,16 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
          
         sudo singularity shell <image_name>.simg
 
-## Setting up GCP DataProc Cluster:
-
+## Custom Image creation on GCP DataProc Cluster:
+- Create a bucket inside GCP [storage](https://console.cloud.google.com/storage) to store a custom image like `gs://{user}/images`
 - Open https://console.cloud.google.com/ 
 - Use “gcloud config set project [PROJECT_ID]” to change to a different project.
-- Inside Cloud Shell:
+- Inside Cloud Shell run:
 
       git clone https://github.com/tahashmi/custom-images
       cd custom-images
-      python3 generate_custom_image.py --image-name "bwa-custom" --dataproc-version "2.0.1-ubuntu18" --customization-script bwa.sh --zone "asia-east1-a" --gcs-bucket "gs://bucket_taha_pk/images" --shutdown-instance-timer-sec 50 --no-smoke-test
-
+      python3 generate_custom_image.py --image-name "bwa-custom" --dataproc-version "2.0.1-ubuntu18" --customization-script bwa_standalone.sh --zone "asia-east1-a" --gcs-bucket "gs://{user}/images" --shutdown-instance-timer-sec 50 --no-smoke-test
+This will create a custom image which can be used on Google GCP DataProc cluster instances.
 
 ## Standalone pre-processing on clusters:
 FASTQ data is streamed to BWA on every cluster node, BWA output is piped into Sambamba to perform sorting, duplicates removal option is also available, if enabled sorted data is piped to this stage as well. For final output, Samtools (merge) is used to produces a single BAM output, ready for further down stream analysis.
