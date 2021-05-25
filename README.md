@@ -27,9 +27,10 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
 - Open https://console.cloud.google.com/ 
 - Use “gcloud config set project [PROJECT_ID]” to change to a different project.
 - Inside Cloud Shell:
-    git clone https://github.com/tahashmi/custom-images
-    cd custom-images
-    python3 generate_custom_image.py --image-name "bwa-custom" --dataproc-version "2.0.1-ubuntu18" --customization-script bwa.sh --zone "asia-east1-a" --gcs-bucket "gs://bucket_taha_pk/images" --shutdown-instance-timer-sec 50 --no-smoke-test
+
+      git clone https://github.com/tahashmi/custom-images
+      cd custom-images
+      python3 generate_custom_image.py --image-name "bwa-custom" --dataproc-version "2.0.1-ubuntu18" --customization-script bwa.sh --zone "asia-east1-a" --gcs-bucket "gs://bucket_taha_pk/images" --shutdown-instance-timer-sec 50 --no-smoke-test
 
 
 ## Standalone pre-processing on clusters:
