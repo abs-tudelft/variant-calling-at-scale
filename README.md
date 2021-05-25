@@ -29,4 +29,4 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
 FASTQ data is streamed to BWA on every cluster node, BWA output is piped into Sambamba to perform sorting, duplicates removal option is also available, if enabled sorted data is piped to this stage as well. For final output, Samtools (merge) is used to produces a single BAM output, ready for further down stream analysis.
 - BWA (alignment) `->` Sambamba (Sorting) `->` Sambamba (Duplicates removal (optional)) `->` Samtools (merge BAMs)
 
-### Google GCP DataProc Cluster:
+1. Perfrom the following [steps](https://github.com/abs-tudelft/SVCall/blob/main/README.md#setting-up-gcp-dataproc-cluster) to make GCP DataProc cluster ready to run this workflow.
