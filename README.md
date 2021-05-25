@@ -35,7 +35,8 @@ This will create a custom image which can be used on Google GCP DataProc cluster
 
 ## Setting up GCP DataProc cluster:
 
-    #On all master and worker nodes
+On all master and worker nodes
+
     #***********************************************#
     sudo apt-get -y update && sudo apt-get install nfs-common
     sudo mkdir -p /mnt/fs_shared
@@ -43,18 +44,20 @@ This will create a custom image which can be used on Google GCP DataProc cluster
     sudo chmod go+rw /mnt/fs_shared/
     df -h --type=nfs
 
-    #On any node 
+On any node
+
     #***********************************************#
     mkdir -p /mnt/fs_shared/reference
     cd /mnt/fs_shared/reference
-    # Download reference genome
+    
+    #Download reference genome
     wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz 
     gunzip GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz 
     mv GCA_000001405.15_GRCh38_no_alt_analysis_set.fna GRCh38.fa
     wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai
     mv GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai GRCh38.fa.fai
     
-    # Download query data
+    #Download the query data
     mkdir -p /mnt/fs_shared/query/ERR001268
     cd /mnt/fs_shared/query/ERR001268
     wget ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA12878/sequence_read/ERR001268_1.filt.fastq.gz
