@@ -22,4 +22,4 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
          
         sudo singularity shell <image_name>.simg
 
-# Standalone BWA (alignment),Sambamba (Sorting and Duplicates removal (optional)) based pre-processing )
+## Standalone BWA (alignment),Sambamba (Sorting and Duplicates removal (optional)) based pre-processing )
