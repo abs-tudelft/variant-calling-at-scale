@@ -86,7 +86,7 @@ On any node
 
 ## Standalone pre-processing on clusters:
 FASTQ data is streamed to BWA on every cluster node, BWA output is piped into Sambamba to perform sorting, duplicates removal option is also available, if enabled sorted data is piped to this stage as well. For final output, Samtools (merge) is used to produces a single BAM output, ready for further down stream analysis.
-##### BWA (alignment) `->` Sambamba (Sorting) `->` Sambamba (Duplicates removal (optional)) `->` Samtools (merge BAMs)
+##### [DataProc cluster] BWA (alignment) `->` Sambamba (Sorting) `->` Sambamba (Duplicates removal (optional)) `->` Samtools (merge BAMs)
 
 1. Custom image is needed to be used on DataProc cluster, follow these [steps](https://github.com/abs-tudelft/SVCall/blob/main/README.md#custom-image-creation-on-gcp-dataproc-cluster) to create one.
 2. Create a network-attached storage system which can be used with Google Compute Engine instances. Storage -> Filestore `->` Give any name like "fs" {instance id/name}, "fs-shared" {file shared name} `->` Create
@@ -96,4 +96,8 @@ FASTQ data is streamed to BWA on every cluster node, BWA output is piped into Sa
 
        taha_ahmad_pk_101@cloudshell:~ (organic-poetry-309513)$ 
        gcloud dataproc jobs submit pyspark --region=us-central1 --cluster=cluster-555  --     properties=spark.pyspark.python=/usr/bin/python3.6,spark.pyspark.driver.python=/usr/bin/python3.6,spark.executor.memory=2G,spark.driver.memory=2G,spark.num.executors=2,spark.executor.cores=8  gs://bucket_taha_pk/scripts/bwa-standalone.py -- --markdup yes --ref /mnt/fs_shared/reference/GRCh38.fa  --path /mnt/fs_shared/query/ERR001268/  --nodes 2 --cores 8 --aligner BWA
-    
+
+##### [Single node] BWA (alignment) `->` Sambamba (Sorting) `->` Sambamba (Duplicates removal (optional)) 
+       time bwa mem -t 8 /mnt/fs_shared/reference/GRCh38.fa /mnt/fs_shared/query/ERR001268/ERR001268_1.fastq /mnt/fs_shared/query/ERR001268/ERR001268_2.fastq  -o /dev/stdout | /usr/local/bin/sambamba-0.8.0-linux-amd64-static view -t 8 -S -f bam /dev/stdin > /dev/stdout | /usr/local/bin/sambamba-0.8.0-linux-amd64-static sort -t 8 -o /mnt/fs_shared/query/ERR001268/bams/ERR001268.bam /dev/stdin
+
+       time /usr/local/bin/sambamba-0.8.0-linux-amd64-static markdup -t 8 -r /mnt/fs_shared/query/ERR001268/bams/ERR001268.bam /mnt/fs_shared/query/ERR001268/bams/ERR001268_md.bam
