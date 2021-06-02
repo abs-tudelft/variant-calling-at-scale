@@ -104,3 +104,13 @@ FASTQ data is streamed to BWA on every cluster node, BWA output is piped into Sa
 
 ### Other Variant Callers Support
 Any variant caller which can support regions specific variant calling can be integrated into this workflow. Here we show how to use the [Octopus](https://github.com/luntergroup/octopus), a latest and an accurate/fast variant caller as a use case to demonstrate the feasibility of integrating any other variant callers in this approach.
+
+1. Download octopus singularity container on GCP Filestore
+```
+cd /mnt/fs_shared
+sudo singularity pull  docker://dancooke/octopus
+```
+2. Run the following command inside GCP console by changing `--vcaller` to `Octopus`:
+```
+gcloud dataproc jobs submit pyspark --region=us-central1 --cluster=cluster-555  --properties=spark.pyspark.python=/usr/bin/python3.6,spark.pyspark.driver.python=/usr/bin/python3.6,spark.executor.memory=2G,spark.driver.memory=2G,spark.num.executors=3,spark.executor.cores=8  gs://bucket_taha_pk/scripts/bwa.py -- --part 3 --ref /mnt/fs_shared/reference/GRCh38.fa  --path /mnt/fs_shared/query/HG003/  --nodes 3 --cores 8 --aligner BWA --vcaller Octopus
+```
