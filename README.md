@@ -101,3 +101,6 @@ FASTQ data is streamed to BWA on every cluster node, BWA output is piped into Sa
        time bwa mem -t 8 /mnt/fs_shared/reference/GRCh38.fa /mnt/fs_shared/query/ERR001268/ERR001268_1.fastq /mnt/fs_shared/query/ERR001268/ERR001268_2.fastq  -o /dev/stdout | /usr/local/bin/sambamba-0.8.0-linux-amd64-static view -t 8 -S -f bam /dev/stdin > /dev/stdout | /usr/local/bin/sambamba-0.8.0-linux-amd64-static sort -t 8 -o /mnt/fs_shared/query/ERR001268/bams/ERR001268.bam /dev/stdin
 
        time /usr/local/bin/sambamba-0.8.0-linux-amd64-static markdup -t 8 -r /mnt/fs_shared/query/ERR001268/bams/ERR001268.bam /mnt/fs_shared/query/ERR001268/bams/ERR001268_md.bam
+
+### Other Variant Callers Support
+Any variant caller which can support regions specific variant calling can be integrated into this workflow. Here we show how to use the [Octopus](https://github.com/luntergroup/octopus), a latest and an accurate/fast variant caller as a use case to demonstrate the feasibility of integrating any other variant callers in this approach.
