@@ -4,10 +4,10 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
 
 This approach can be used on following infraturcture:
 
-1. Slurm Cluster
-2. Google GCP DataProc Cluster
+##### 1. Slurm based Cluster
+##### 2. Google GCP DataProc Cluster
 
-# 1. Slurm Cluster
+# 1. Slurm based Cluster
 
 ## Apache Arrow Dependencies
  - [C++ libraries](https://github.com/apache/arrow/tree/master/cpp)
