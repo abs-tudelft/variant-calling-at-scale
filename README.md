@@ -31,6 +31,14 @@ This approach can be used on following infraturcture(s):
 
 # 2. Google GCP DataProc Cluster
 
+The following steps are required to test/run this workflow.
+
+1. Before running the variant calling workflow, we have to create a custom operating system image by installing all the prerequisite applications, which will be used on GCP DataProc cluster. 
+2. We will then create a GCP DataProc cluster and a GCP Filestore instance. 
+3. After DataProc cluster creation, we will mount the Filestore on each node. 
+4. Then we download the reference, query and GIAB benchmark truth datasets. 
+5. The final step is to run different parts of this workflow on GCP console. 
+
 ## Custom Image creation on GCP DataProc Cluster:
 - Create a bucket inside GCP [storage](https://console.cloud.google.com/storage) to store a custom image like `gs://{user}/images`
 - Open https://console.cloud.google.com/ 
