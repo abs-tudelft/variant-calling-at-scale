@@ -2,10 +2,10 @@
 
 SVCall is a scalable, parallel and efficient implementation of next generation sequencing data pre-processing and variant calling workflows. Our design tightly integrates most pre-processing workflow stages, using Spark built-in functions to sort reads by coordinates, and mark duplicates efficiently. A cluster scaled DeepVariant for both CPU-only and CPU+GPU clusters is also integrated in this workflow. 
 
-This approach can be used on following infraturcture:
+This approach can be used on following infraturcture(s):
 
-##### 1. Slurm based Cluster
-##### 2. Google GCP DataProc Cluster
+##### 1. Slurm based Cluster [1](https://github.com/abs-tudelft/SVCall/blob/main/README.md#1-slurm-based-cluster-1)
+##### 2. Google GCP DataProc Cluster [2]()
 
 # 1. Slurm based Cluster
 
