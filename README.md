@@ -16,11 +16,21 @@ This approach can be used for following purpose(s):
 3. Apache Spark based cluster scaled pre-processing (BWA-MEM, Sorting and MarkDuplicate and BAM merging) `->` output a single sorted/mkdup BAM file
 4. Apache Spark based cluster scaled Variant Calling (DeepVariant/Octopus) `->` input sorted/mkdup BAM `->` output a single VCF file
 
-## Aligners
+#### Aligners
 
-- [x] SQL Parser
-- [x] SQL Query Planner
-- [ ] 
+- [x] BWA-MEM
+- [ ] BWA-MEM2
+- [ ] Bowtie2
+- [x] Minimap2
+
+
+#### Variant Callers
+
+- [x] DeepVariant
+- [x] Octopus
+- [ ] Strelka2
+- [ ] GATK4 Haplotypecaller
+- [ ] Freebayes
 
 # 1. Slurm based Cluster
 
