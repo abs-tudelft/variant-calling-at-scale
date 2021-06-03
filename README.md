@@ -7,9 +7,11 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
 
 This approach can be used on following infraturcture(s):
 
-##### 1. [Slurm based Cluster](https://github.com/abs-tudelft/SVCall/blob/main/README.md#1-slurm-based-cluster-1) (Like [Cartesius](https://userinfo.surfsara.nl/systems/cartesius/description): the Dutch supercomputer)
-##### 2. [Google GCP Cluster](https://github.com/abs-tudelft/SVCall/blob/main/README.md#2-google-gcp-dataproc-cluster) ([DataProc](https://cloud.google.com/dataproc))
-
+- [x] [Slurm based Cluster](https://github.com/abs-tudelft/SVCall/blob/main/README.md#1-slurm-based-cluster-1) (Like [Cartesius](https://userinfo.surfsara.nl/systems/cartesius/description): the Dutch supercomputer)
+- [x] [Google GCP Cluster](https://github.com/abs-tudelft/SVCall/blob/main/README.md#2-google-gcp-dataproc-cluster) ([DataProc](https://cloud.google.com/dataproc))
+- [ ] Amazon (AWS) Cloud
+- [ ] Alibaba Cloud
+- [ ] Microsoft Azure
 
 #### Methods
 
