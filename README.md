@@ -7,6 +7,14 @@ This approach can be used on following infraturcture(s):
 ##### 1. [Slurm based Cluster](https://github.com/abs-tudelft/SVCall/blob/main/README.md#1-slurm-based-cluster-1) (Like [Cartesius](https://userinfo.surfsara.nl/systems/cartesius/description): the Dutch supercomputer)
 ##### 2. [Google GCP Cluster](https://github.com/abs-tudelft/SVCall/blob/main/README.md#2-google-gcp-dataproc-cluster) ([DataProc](https://cloud.google.com/dataproc))
 
+
+This approach can be used for following purpose(s):
+
+1. Apache Spark based cluster scaled pre-processing (BWA-MEM, Sorting and MarkDuplicate) `->` output multiple BAM files based on choromosome regions
+2. Apache Spark based cluster scaled Variant Calling (BWA-MEM, Sorting and MarkDuplicate and DeepVariant/Octopus) `->` output VCF
+3. Apache Spark based cluster scaled pre-processing (BWA-MEM, Sorting and MarkDuplicate and SAM merging) `->` output a single BAM file
+4. Apache Spark based cluster scaled Variant Calling (DeepVariant/Octopus) `->` output a single VCF file
+
 # 1. Slurm based Cluster
 
 ## Apache Arrow Dependencies
