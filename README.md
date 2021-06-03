@@ -2,6 +2,13 @@
 
 SVCall is a scalable, parallel and efficient implementation of next generation sequencing data pre-processing and variant calling workflows. Our design tightly integrates most pre-processing workflow stages, using Spark built-in functions to sort reads by coordinates, and mark duplicates efficiently. A cluster scaled DeepVariant for both CPU-only and CPU+GPU clusters is also integrated in this workflow. 
 
+This approach can be used on following infraturcture:
+
+1. Slurm Cluster
+2. Google GCP DataProc Cluster
+
+# 1. Slurm Cluster
+
 ## Apache Arrow Dependencies
  - [C++ libraries](https://github.com/apache/arrow/tree/master/cpp)
  - [C bindings using GLib](https://github.com/apache/arrow/tree/master/c_glib)
@@ -21,6 +28,8 @@ SVCall is a scalable, parallel and efficient implementation of next generation s
 3. Now enter into generated image using command:
          
         sudo singularity shell <image_name>.simg
+
+# 2. Google GCP DataProc Cluster
 
 ## Custom Image creation on GCP DataProc Cluster:
 - Create a bucket inside GCP [storage](https://console.cloud.google.com/storage) to store a custom image like `gs://{user}/images`
