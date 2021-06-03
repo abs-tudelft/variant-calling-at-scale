@@ -16,6 +16,12 @@ This approach can be used for following purpose(s):
 3. Apache Spark based cluster scaled pre-processing (BWA-MEM, Sorting and MarkDuplicate and BAM merging) `->` output a single sorted/mkdup BAM file
 4. Apache Spark based cluster scaled Variant Calling (DeepVariant/Octopus) `->` input sorted/mkdup BAM `->` output a single VCF file
 
+## Aligners
+
+- [x] SQL Parser
+- [x] SQL Query Planner
+- [ ] 
+
 # 1. Slurm based Cluster
 
 ## Apache Arrow Dependencies
