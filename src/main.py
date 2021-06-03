@@ -1,22 +1,23 @@
 #!/usr/bin/python
 
-#export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-#export PATH=$JAVA_HOME/bin:$PATH
-
-#export PYSPARK_PYTHON=/usr/bin/python3.6
-#export PYSPARK_DRIVER_PYTHON=/usr/bin/python3.6
-
-#alias python='/usr/bin/python3.6'
 import multiprocessing
 from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 import threading
 
 import numpy as np
+import pyarrow as pa
+import pysam
+import pandas as pd
+import re
+import hashlib
+
+'''
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.plasma as plasma
-
+'''
 import subprocess
 import time
 import random
@@ -24,11 +25,13 @@ import string
 import sys
 import os
 import glob
-
+import argparse
+import shutil
+'''
 import re
 import hashlib
-#import pysam
-
+import pysam
+'''
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
 
@@ -48,44 +51,21 @@ from pyspark.sql import functions as F
 
 from pyspark.sql.dataframe import DataFrame
 
-#from pyspark.sql.types import from_arrow_schema
-#from pyspark.sql.dataframe import DataFrame
-#from pyspark.serializers import ArrowSerializer, PickleSerializer, AutoBatchedSerializer
-
+#################################################
+CHRMS=['1', '110', '120', '130', '140', '150','160', '170', '180', '190', '2', '210', '220', '230', '240', '250', '260', '270', '280', '290', '3', '31', '32', '33', '34','35','36','37', '4', '41', '42', '43', '44','45','46','47', '5', '51', '52', '53', '54','55','56','57', '6', '61', '62', '63', '64','65','66', '7', '71', '72', '73','74','75','76', '8', '81', '82', '83','84','85', '9', '91', '92', '93','94','95', '10', '101', '102', '103','104','105', '11', '111', '112', '113','114','115', '12', '121', '122', '123','124','125', '13', '131', '132','133','134', '14', '141', '142','143', '15', '151', '152','153', '16', '161', '162','163', '17', '171', '172', '18', '181', '182', '19', '191', '20', '201','202', '21', '211', '22', '221', '23', '231', '232', '233','234','235', '24', '241', '25']
 
 #################################################
-BAM_CMATCH      ='M'
-BAM_CINS        ='I'
-BAM_CDEL        ='D'
-BAM_CREF_SKIP   ='N'
-BAM_CSOFT_CLIP  ='S'
-BAM_CHARD_CLIP  ='H'
-BAM_CPAD        ='P'
-BAM_CEQUAL      ='='
-BAM_CDIFF       ='X'
-BAM_CBACK       ='B'
 
-BAM_CIGAR_STR   ="MIDNSHP=XB"
-BAM_CIGAR_SHIFT =4
-BAM_CIGAR_MASK  =0xf
-BAM_CIGAR_TYPE  =0x3C1A7
-
-CIGAR_REGEX = re.compile("(\d+)([MIDNSHP=XB])")
-#################################################
-
-
-#################################################
 def _arrow_record_batch_dumps(rb):
-    
+
     #from pyspark.serializers import ArrowSerializer
 
     #import os
     #os.environ['ARROW_PRE_0_15_IPC_FORMAT'] = '1'
-    
+
     return bytearray(rb.serialize())
 
     #return map(bytearray, map(ArrowSerializer().dumps, rb))
-
 
 def createFromArrowRecordBatchesRDD(self, ardd, schema=None, timezone=None):
     #from pyspark.sql.types import from_arrow_schema
@@ -95,15 +75,18 @@ def createFromArrowRecordBatchesRDD(self, ardd, schema=None, timezone=None):
     from pyspark.sql.pandas.types import from_arrow_schema
     from pyspark.sql.dataframe import DataFrame
 
-    # Filter out and cache arrow record batches 
+    # Filter out and cache arrow record batches
     ardd = ardd.filter(lambda x: isinstance(x, pa.RecordBatch)).cache()
-    
+
     ardd = ardd.map(_arrow_record_batch_dumps)
-    
+
     #schema = pa.schema([pa.field('c0', pa.int16()),
     #                    pa.field('c1', pa.int32())],
     #                   metadata={b'foo': b'bar'})
-    schema = from_arrow_schema(_schema())
+    if(args.aligner=="BWA"):
+        schema = from_arrow_schema(sam_schema())
+    else:
+        schema = from_arrow_schema(_schema())
 
     # Create the Spark DataFrame directly from the Arrow data and schema
     jrdd = ardd._to_java_object_rdd()
@@ -113,27 +96,14 @@ def createFromArrowRecordBatchesRDD(self, ardd, schema=None, timezone=None):
 
     return df
 
-def createFromArrowRecordBatchesRDD1(self, prdd, batches, schema=None, timezone=None):
-    print("From inside createFromArrowRecordBatchesRDD..")
+def _schema():
+    fields = [
+        pa.field('beginPoss', pa.int32()),
+        pa.field('sam', pa.string())
+    ]
+    return pa.schema(fields)
 
-    prdd = prdd.flatMap(lambda x: map(bytearray, map(ArrowSerializer().dumps, batches)))
-
-    # Create the Spark DataFrame directly from the Arrow data and schema
-    jrdd = prdd._to_java_object_rdd()
-    jdf = self._jvm.PythonSQLUtils.arrowPayloadToDataFrame(
-        jrdd, from_arrow_schema(arrow_schema()).json(), self._wrapped._jsqlContext)
-    df = DataFrame(jdf, self._wrapped)
-    df._schema = schema
-    return df
-
-#################################################
-# Connect to clients
-def connect():
-    global client
-    client = plasma.connect('/tmp/store0', 0)
-    #np.random.seed(int(time.time() * 10e7) % 10000000)
-
-def arrow_schema():
+def sam_schema():
     fields = [
         pa.field('qNames', pa.string()),
         pa.field('flags', pa.int32()),
@@ -154,120 +124,764 @@ def arrow_schema():
     ]
     return pa.schema(fields)
 
-def _schema():
-    fields = [
-        pa.field('beginPoss', pa.int32()),
-        pa.field('sam', pa.string())
-    ]
-    return pa.schema(fields)
+#########################################################
+#########################################################
+def runDeepVariant(n_index):
+    for index, inBAM in enumerate(BAM_FILES, start=0):
+        if index % int(NODES) == n_index:
+            #/scratch-shared/tahmad/bio_data/HG002/HG002_chr15:76493391-86493391.bam
+            print(inBAM)
 
-def runDeepVariant(inBAM):
-    
-    #/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-2x-seqk/ERR194147-chr1-0.bam
-    #/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-2x-seqk/ERR194147-chr1.bam
-    
-    
-    items = inBAM.split('-')
-    matching = [s for s in items if "chr" in s]
-    print(matching)
-    if ".bam" in matching[0]:
-        CHR = matching[0].replace(".bam", "")
-        CHRPART = ""
-    else:
-        last2 = items[-2:]
-        last = last2[-1:]
-        last= last[0]
-        CHR = matching[0]
-        CHRPART = last.replace(".bam", "")
- 
-    BIN_VERSION="1.0.0"
-    OUTPUT_DIR='/scratch-shared/tahmad/bio_data/HG001_NA12878/quickstart-output-'+CHR+'-'+CHRPART
-    print(OUTPUT_DIR)
-    os.system("mkdir -p OUTPUT_DIR")
-    
-    docker='docker://google/deepvariant:'+BIN_VERSION 
-    interdir='--intermediate_results_dir='+OUTPUT_DIR+'/intermediate_results_dir'
-    #ref='--ref=/home/tahmad/mcx/bio_data/fasta/'+CHR+'/'+CHR+'.fa'
-    ref='--ref=/scratch-shared/tahmad/bio_data/hg38/fasta/'+CHR+'.fa'
-    read='--reads='+inBAM
-    out='--output_vcf='+OUTPUT_DIR+'/output.vcf.gz' 
-    outg='--output_gvcf='+OUTPUT_DIR+'/output.g.vcf.gz'
+            index_path='samtools index -@' + CORES +' '+ inBAM
+            os.system(index_path)
 
-    #os.system("singularity run -B /usr/lib/locale/:/usr/lib/locale/  docker://google/deepvariant:"+BIN_VERSION+  " /opt/deepvariant/bin/run_deepvariant  --model_type=WGS   --ref=/home/tahmad/mcx/bio_data/fasta/"+CHR+"/"+CHR+".fa  --reads="+inBAM+  " --output_vcf="+OUTPUT_DIR+"/ERR194147-output.vcf.gz  --output_gvcf="+OUTPUT_DIR+"/ERR194147-output.g.vcf.gz  --intermediate_results_dir "+OUTPUT_DIR+"/intermediate_results_dir --num_shards=1")
-    cmd= ['/usr/bin/singularity', 'run', '-B /usr/lib/locale/:/usr/lib/locale/',  docker, '/opt/deepvariant/bin/run_deepvariant',  '--model_type=WGS',   ref, read, out, outg,  interdir, '--num_shards=6']
-    
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    process.wait()
-    #os.system("which singularity")
-    #prog = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    #out, err = prog.communicate()
+            REGION = inBAM.split('_')[-1].replace(".bam", "")
+            CHR= inBAM.split('_')[-1].replace(".bam", "").split(':')[0]
+            BIN_VERSION="1.1.0"
+
+            OUT=os.path.dirname(inBAM)
+            print(REGION)
+
+            DVOUTPUT=OUT+'/outputs/dv_output-'+REGION
+            WHATSHAPOUTPUT=OUT+'/outputs/whatshap_output-'+REGION
+
+            if os.path.exists(DVOUTPUT) and os.path.exists(WHATSHAPOUTPUT):
+                shutil.rmtree(DVOUTPUT)
+                shutil.rmtree(WHATSHAPOUTPUT)
+
+            os.mkdir(DVOUTPUT)
+            os.mkdir(WHATSHAPOUTPUT)
+
+            OUTPUT_DIR=DVOUTPUT+'/quickstart-output-'+REGION
+
+            docker='docker://google/deepvariant:'+BIN_VERSION
+            interdir='--intermediate_results_dir='+DVOUTPUT+'/intermediate_results_dir'
+            ref_dv='--ref='+REF #/scratch-shared/tahmad/bio_data/GRCh38/GRCh38.fa'
+            read='--reads='+inBAM
+            out='--output_vcf='+OUT+'/'+ REGION +'.dv.vcf.gz'
+            outg='--output_gvcf='+DVOUTPUT+'/'+ REGION +'.dv.g.vcf.gz'
+            region='--regions='+REGION
+            #region='--regions=chr20'
+            threads='--num_shards='+CORES
+
+            #cmd='singularity run -B /mnt/fs_shared/:/mnt/fs_shared/ /mnt/fs_shared/deepvariant_1.1.0.sif ' + ' /opt/deepvariant/bin/run_deepvariant --model_type=PACBIO ' + ref_dv +' '+ read +' '+ out +' '+ outg +' '+ interdir +' '+ region +' '+ threads
+            #print(cmd)
+            #os.system(cmd)
+            #DeepVariant 1-pass
+            cmd= ['/usr/local/bin/singularity', 'run', '-B /mnt/fs_shared/:/mnt/fs_shared/', '/mnt/fs_shared/deepvariant_1.1.0.sif', '/opt/deepvariant/bin/run_deepvariant',  '--model_type=PACBIO', ref_dv, read, out, outg, interdir, region, threads]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            process.wait()
+
+            ref=REF #'/scratch-shared/tahmad/bio_data/GRCh38/GRCh38.fa'
+            dv_out= OUT+'/'+ REGION +'.dv.vcf.gz'
+            outphased=WHATSHAPOUTPUT+'/'+REGION+'.phased.vcf.gz'
+            chr_phasing='--chromosome='+CHR
+
+            #Whathap phase
+            cmd= ['/usr/local/bin/whatshap', 'phase', '--ignore-read-groups', '-o', outphased,  '--reference', ref, chr_phasing, dv_out, inBAM]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            process.wait()
+
+            #Tabix VCF
+            tabix='tabix -p vcf '+ outphased
+            os.system(tabix)
+
+            outhaplotagged=WHATSHAPOUTPUT+'/'+REGION+'.haplotagged.bam'
+
+            #Whathap haplotag
+            cmd= ['/usr/local/bin/whatshap', 'haplotag',  '--ignore-read-groups', '-o', outhaplotagged,  '--reference', ref, outphased,  inBAM]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            process.wait()
+
+            #Index haplotagged
+            indexhaplotagged='samtools index ' + outhaplotagged
+            os.system(indexhaplotagged)
+
+            out1='--output_vcf='+OUT+'/'+ REGION +'.haplotagged.vcf.gz'
+            outg1='--output_gvcf='+WHATSHAPOUTPUT+'/'+ REGION +'.haplotagged.g.vcf.gz'
+            readwh='--reads='+outhaplotagged
+
+            #DeepVariant 2-pass
+            cmd= ['/usr/local/bin/singularity', 'run', '-B /mnt/fs_shared/:/mnt/fs_shared/', '/mnt/fs_shared/deepvariant_1.1.0.sif', '/opt/deepvariant/bin/run_deepvariant',  '--model_type=PACBIO', ref_dv, readwh, '--use_hp_information', out1, outg1, interdir, region, threads]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            process.wait()
+
     return 1
+#######################################################################################
+def runDeepVariantBWA(n_index):
+    for index, inBAM in enumerate(BAM_FILES, start=0):
+        if index % int(NODES) == n_index:
+            #/scratch-shared/tahmad/bio_data/HG002/HG002_chr15:76493391-86493391.bam
+            print(inBAM)
 
-def runBWA(fqfile):
+            index_path='samtools index -@' + CORES +' '+ inBAM
+            os.system(index_path)
+
+            REGION = inBAM.split('_')[-1].replace(".bam", "")
+            CHR= inBAM.split('_')[-1].replace(".bam", "").split(':')[0]
+            BIN_VERSION="1.1.0"
+
+            OUT=os.path.dirname(inBAM)
+            print(REGION)
+
+            DVOUTPUT=OUT+'/outputs/dv_output-'+REGION
+            WHATSHAPOUTPUT=OUT+'/outputs/whatshap_output-'+REGION
+
+            if os.path.exists(DVOUTPUT) and os.path.exists(WHATSHAPOUTPUT):
+                shutil.rmtree(DVOUTPUT)
+                shutil.rmtree(WHATSHAPOUTPUT)
+
+            os.mkdir(DVOUTPUT)
+            os.mkdir(WHATSHAPOUTPUT)
+
+            OUTPUT_DIR=DVOUTPUT+'/quickstart-output-'+REGION
+
+            docker='docker://google/deepvariant:'+BIN_VERSION
+            interdir='--intermediate_results_dir='+DVOUTPUT+'/intermediate_results_dir'
+            ref_dv='--ref='+REF #/scratch-shared/tahmad/bio_data/GRCh38/GRCh38.fa'
+            read='--reads='+inBAM
+            out='--output_vcf='+OUT+'/'+ REGION +'.dv.vcf.gz'
+            outg='--output_gvcf='+DVOUTPUT+'/'+ REGION +'.dv.g.vcf.gz'
+            region='--regions='+REGION
+            #region='--regions=chr20'
+            threads='--num_shards='+CORES
+
+            #cmd='singularity run -B /mnt/fs_shared/:/mnt/fs_shared/ /mnt/fs_shared/deepvariant_1.1.0.sif ' + ' /opt/deepvariant/bin/run_deepvariant --model_type=PACBIO ' + ref_dv +' '+ read +' '+ out +' '+ outg +' '+ interdir +' '+ region +' '+ threads
+            #print(cmd)
+            #os.system(cmd)
+            #DeepVariant 1-pass
+            cmd= ['/usr/local/bin/singularity', 'run', '-B /mnt/fs_shared/:/mnt/fs_shared/', '/mnt/fs_shared/deepvariant_1.1.0.sif', '/opt/deepvariant/bin/run_deepvariant',  '--model_type=WGS', ref_dv, read, out, outg, interdir, region, threads]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            process.wait()
+
+    return 1
+#########################################################
+def runOctopusBWA(n_index):
+    for index, inBAM in enumerate(BAM_FILES, start=0):
+        if index % int(NODES) == n_index:
+            #/scratch-shared/tahmad/bio_data/HG002/HG002_chr15:76493391-86493391.bam
+            print(inBAM)
+
+            index_path='samtools index -@' + CORES +' '+ inBAM
+            os.system(index_path)
+
+            REGION = inBAM.split('_')[-1].replace(".bam", "")
+
+            OUT=os.path.dirname(inBAM)
+            print(REGION)
+
+            ref='--reference='+REF 
+            reads='--reads='+inBAM
+            out='--output='+OUT+'/'+ REGION +'_octopus.vcf.gz'
+            region='--regions='+REGION
+            #region='--regions=chr20'
+            threads='--threads='+CORES
+            err_model='--sequence-error-model=PCRF.NovaSeq'
+            forest='--forest=/opt/octopus/resources/forests/germline.v0.7.4.forest'
+
+            #singularity exec octopus_latest.sif octopus --threads 24  --reference /scratch-shared/tahmad/bio_data/GRCh38/GRCh38.fa  --reads /scratch-shared/tahmad/bio_data/NA24385/HG003/HG003_chr20.bam -T chr20 --sequence-error-model PCRF.NovaSeq --forest /opt/octopus/resources/forests/germline.v0.7.4.forest -o /scratch-shared/tahmad/bio_data/NA24385/HG003/octopus.vcf.gz
+
+            cmd= ['/usr/local/bin/singularity', 'exec', '-B /mnt/fs_shared/:/mnt/fs_shared/', '/mnt/fs_shared/octopus_latest.sif', 'octopus',  threads, ref, reads, region, err_model, forest, out]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            process.wait()
+
+    return 1  
+    
+#########################################################
+def long_reads_write_bam(df, by, part):
+
+    def sam_operations(pdf):
+
+        # importing socket module
+        #import socket
+        # getting the hostname by socket.gethostname() method
+        #hostname = socket.gethostname()
+
+        name = args.path.split('/')[-2] 
+        #headerpath=sorted(glob.glob(args.path+'bams/'+name+'_header_'+'*.sam'))
+        #headerpath=sorted(glob.glob(args.path+'bams/header.sam'))
+        samfile = pysam.AlignmentFile(args.path+'bams/header.sam')
+        header = samfile.header
+        #print(header)
+        samfile.close()
+        
+        ##/scratch-shared/tahmad/bio_data/FDA/Illumnia/HG003/8/bams/
+        sam_name=args.path+'bams/'+name+'_'+part+'.bam'
+        print(sam_name)
+        len_pdf=len(pdf.index)
+        with pysam.AlignmentFile(sam_name, "wb", header=header) as outf:
+
+            for i in range(0, len_pdf-1):
+                #if i in duplicates:
+                #    res_d.insert(i, sdf.loc[i, 'flags'] | 1024)
+                #else:
+                #    res_d.insert(i, sdf.loc[i, 'flags'])
+                #header = pysam.AlignmentHeader.from_dict(header)
+                a = pysam.AlignedSegment()#(header)
+                a.query_name = pdf.loc[i, 'qNames'] 
+
+                seq=pdf.loc[i, 'seqs']
+                if(seq=='*'):
+                    a.query_sequence= ""
+                else:
+                    a.query_sequence= seq
+
+                a.flag = int(pdf.loc[i, 'flags'])
+                #a.reference_name=pdf.loc[i, 'rIDs']
+                
+                a.reference_start = int(pdf.loc[i, 'beginPoss'])-1
+                #print(a.reference_start)
+                a.mapping_quality = int(pdf.loc[i, 'mapQs'])
+                a.cigarstring = pdf.loc[i, 'cigars']
+                #a.next_reference_name=pdf.loc[i, 'rNextIds']
+
+                pNextsvalue=int(pdf.loc[i, 'pNexts'])
+                if(pNextsvalue ==0):
+                    a.next_reference_start= -1 #int(pdf.loc[i, 'pNexts'])
+                else:
+                    a.next_reference_start=pNextsvalue
+
+                a.template_length= int(pdf.loc[i, 'tLens'])
+                if(seq=='*'):
+                    a.query_qualities= ""
+                else:
+                    a.query_qualities = pysam.qualitystring_to_array(pdf.loc[i, 'quals'])
+                #a.tags = (("NM", 1), ("RG", "L1"))
+                items = pdf.loc[i, 'tagss'].split('\'')
+                #print(items)
+                for item in items[1:]:
+                    sub = item.split(':')
+                    a.set_tag(sub[0], sub[-1])
+
+                #a.reference_name=pdf.loc[i, 'rIDs']
+                #try:
+                #    a.next_reference_name=pdf.loc[i, 'rNextIds']
+                #except:
+                #    a.next_reference_name="*"
+                rid=pdf.loc[i, 'rIDs']
+                if(rid=="chrM"):
+                    a.reference_id=-1
+                elif(rid=="chrX"):
+                    a.reference_id=22
+                elif(rid=="chrY"):
+                    a.reference_id=23
+                else:
+                    chrno=rid.replace("chr", "")
+                    a.reference_id = int(chrno)-1
+                '''
+                rnid=pdf.loc[i, 'rNextIds']
+                if(rnid=="chrM"):
+                    a.next_reference_id=-1
+                elif(rnid=="chrX"):
+                    a.next_reference_id=22
+                elif(rnid=="chrY"):
+                    a.next_reference_id=23
+                else:
+                    chrno=rnid.replace("chr", "")
+                    a.next_reference_id = int(chrno)-1
+                '''
+                a.next_reference_id = -1
+
+                outf.write(a)
+
+        index_path='samtools index ' + sam_name
+        os.system(index_path)
+
+        return  pdf[['flags']] #pdf.loc[:, 'flags'] #pd.DataFrame({'flags': res_d})
+
+    return df.groupby(by).applyInPandas(sam_operations, schema="flags string")
+
+#########################################################
+BAM_CMATCH      ='M'
+BAM_CINS        ='I'
+BAM_CDEL        ='D'
+BAM_CREF_SKIP   ='N'
+BAM_CSOFT_CLIP  ='S'
+BAM_CHARD_CLIP  ='H'
+BAM_CPAD        ='P'
+BAM_CEQUAL      ='='
+BAM_CDIFF       ='X'
+BAM_CBACK       ='B'
+
+BAM_CIGAR_STR   ="MIDNSHP=XB"
+BAM_CIGAR_SHIFT =4
+BAM_CIGAR_MASK  =0xf
+BAM_CIGAR_TYPE  =0x3C1A7
+
+CIGAR_REGEX = re.compile("(\d+)([MIDNSHP=XB])")
+#########################################################
+def qual_score_by_cigar(cigars):
+    qpos = 0
+    parts = CIGAR_REGEX.findall(cigars)
+    for y in range(0, len(parts)):
+        op = parts[y][1]
+        if op == BAM_CMATCH or \
+            op == BAM_CINS or \
+            op == BAM_CSOFT_CLIP or \
+            op == BAM_CEQUAL or \
+            op == BAM_CDIFF:
+                   qpos += int(parts[y][0])
+    return qpos
+#########################################################
+def mean_qual(quals):
+    qual = [ord(c) for c in quals]
+    mqual = (1 - 10 ** (np.mean(qual)/-10))
+    return mqual
+#########################################################
+def short_reads_write_bam(df, by, part):
+
+    def sam_operations(pdf):
+
+        # importing socket module
+        #import socket
+        # getting the hostname by socket.gethostname() method
+        #hostname = socket.gethostname()
+
+        #********************************************************#
+
+        res_d=[]
+        process_next = False
+        process_start = False
+
+        index_d=[]
+        read_qual_d=[]
+        j=0
+        # fields to store for each alignment
+        #fields = ['index','read_qual']
+        #data = {f: list() for f in fields}
+
+        len_pdf=len(pdf.index)
+        for i in range(0, len_pdf-1):
+            if pdf.loc[i+1, 'beginPoss'] == pdf.loc[i, 'beginPoss'] and pdf.loc[i+1, 'pNexts'] == pdf.loc[i, 'pNexts']:
+                #if process_next == False and process_start == False:
+                    # fields to store for each alignment
+                    #fields = ['index','read_qual']
+                    #data = {f: list() for f in fields}
+
+                index_d.insert(j, i)
+                read_qual_d.insert(j, mean_qual(pdf.loc[i, 'quals']))
+                j=j+1
+                #data['index'].append(i)
+                #data['read_qual'].append(mean_qual(pdf.loc[i, 'quals']))
+                process_next = True
+            else:
+                process_start = True
+                res_d.insert(i, pdf.loc[i, 'flags'])
+
+            if process_next == True and process_start == True:
+                #sdf = pd.DataFrame(data)
+                #rq = sdf["read_qual"]
+                read_qual_index = read_qual_d.index( max(read_qual_d) )
+
+                for i in range(0, len(read_qual_d)):
+                    if not i == read_qual_index:
+                        pdf.loc[i, 'flags']= pdf.loc[i, 'flags'] | 1024
+
+                process_next = False
+                process_start = False
+
+                index_d.clear()
+                read_qual_d.clear()
+                j=0
+
+        #********************************************************#
+
+        name = args.path.split('/')[-2] 
+        headerpath=sorted(glob.glob(args.path+'bams/header_'+'*.sam'))
+        #headerpath=sorted(glob.glob(args.path+'bams/header.sam'))
+        samfile = pysam.AlignmentFile(headerpath[1])
+        header = samfile.header
+        #print(header)
+        samfile.close()
+        
+        ##/scratch-shared/tahmad/bio_data/FDA/Illumnia/HG003/8/bams/
+        sam_name=args.path+'bams/'+name+'_'+part+'.bam'
+        print(sam_name)
+        #len_pdf=len(pdf.index)
+        with pysam.AlignmentFile(sam_name, "wb", header=header) as outf:
+
+            for i in range(0, len_pdf-1):
+                #if i in duplicates:
+                #    res_d.insert(i, sdf.loc[i, 'flags'] | 1024)
+                #else:
+                #    res_d.insert(i, sdf.loc[i, 'flags'])
+                #header = pysam.AlignmentHeader.from_dict(header)
+                a = pysam.AlignedSegment()#(header)
+                a.query_name = pdf.loc[i, 'qNames'] 
+
+                seq=pdf.loc[i, 'seqs']
+                if(seq=='*'):
+                    a.query_sequence= ""
+                else:
+                    a.query_sequence= seq
+
+                a.flag = pdf.loc[i, 'flags']
+                #a.reference_name=pdf.loc[i, 'rIDs']
+                
+                a.reference_start = pdf.loc[i, 'beginPoss']-1
+                #print(a.reference_start)
+                a.mapping_quality = pdf.loc[i, 'mapQs']
+                a.cigarstring = pdf.loc[i, 'cigars']
+                #a.next_reference_name=pdf.loc[i, 'rNextIds']
+
+                pNextsvalue=pdf.loc[i, 'pNexts']
+                if(pNextsvalue ==0):
+                    a.next_reference_start= -1 #int(pdf.loc[i, 'pNexts'])
+                else:
+                    a.next_reference_start=pNextsvalue
+
+                a.template_length= pdf.loc[i, 'tLens']
+                if(seq=='*'):
+                    a.query_qualities= ""
+                else:
+                    a.query_qualities = pysam.qualitystring_to_array(pdf.loc[i, 'quals'])
+                #a.tags = (("NM", 1), ("RG", "L1"))
+                items = pdf.loc[i, 'tagss'].split('\'')
+                #print(items)
+                for item in items[1:]:
+                    sub = item.split(':')
+                    a.set_tag(sub[0], sub[-1])
+
+                #a.reference_name=pdf.loc[i, 'rIDs']
+                #try:
+                #    a.next_reference_name=pdf.loc[i, 'rNextIds']
+                #except:
+                #    a.next_reference_name="*"
+                '''
+                rid=pdf.loc[i, 'rIDs']
+                if(rid=="chrM"):
+                    a.reference_id=-1
+                elif(rid=="chrX"):
+                    a.reference_id=22
+                elif(rid=="chrY"):
+                    a.reference_id=23
+                else:
+                    chrno=rid.replace("chr", "")
+                    a.reference_id = chrno-1
+                '''
+                a.reference_id=pdf.loc[i, 'rIDs']-1
+                '''
+                rnid=pdf.loc[i, 'rNextIds']
+                if(rnid=="chrM"):
+                    a.next_reference_id=-1
+                elif(rnid=="chrX"):
+                    a.next_reference_id=22
+                elif(rnid=="chrY"):
+                    a.next_reference_id=23
+                else:
+                    chrno=rnid.replace("chr", "")
+                    a.next_reference_id = int(chrno)-1
+                '''
+                a.next_reference_id = -1
+
+                outf.write(a)
+
+        index_path='samtools index ' + sam_name
+        os.system(index_path)
+
+        return  pdf[['flags']] #pdf.loc[:, 'flags'] #pd.DataFrame({'flags': res_d})
+
+    return df.groupby(by).applyInPandas(sam_operations, schema="flags integer")
+
+#########################################################
+def short_reads_write_bam_alt(df, by, part):
+
+    def sam_operations(pdf):
+
+        # importing socket module
+        #import socket
+        # getting the hostname by socket.gethostname() method
+        #hostname = socket.gethostname()
+
+        #********************************************************#
+                
+        flag_reg=[]
+        res_d=[]
+        process_next = False
+        process_start = False
+
+        index_d=[]
+        read_qual_d=[]
+        j=0
+        # fields to store for each alignment
+        #fields = ['index','read_qual']
+        #data = {f: list() for f in fields}
+        
+        len_pdf=len(pdf.index)
+        for i in range(0, len_pdf-1):
+            if pdf.loc[i+1, 'beginPoss'] == pdf.loc[i, 'beginPoss'] and pdf.loc[i+1, 'pNexts'] == pdf.loc[i, 'pNexts']:
+                #if process_next == False and process_start == False:
+                    # fields to store for each alignment
+                    #fields = ['index','read_qual']
+                    #data = {f: list() for f in fields}
+
+                index_d.insert(j, i)
+                read_qual_d.insert(j, mean_qual(pdf.loc[i, 'quals']))
+                j=j+1
+                #data['index'].append(i)
+                #data['read_qual'].append(mean_qual(pdf.loc[i, 'quals']))
+                process_next = True
+            else:
+                process_start = True
+                res_d.insert(i, pdf.loc[i, 'flags'])
+
+            if process_next == True and process_start == True:
+                #sdf = pd.DataFrame(data)
+                #rq = sdf["read_qual"]
+                read_qual_index = read_qual_d.index( max(read_qual_d) )
+
+                for i in range(0, len(read_qual_d)):
+                    if not i == read_qual_index:
+                        pdf.loc[i, 'flags']= pdf.loc[i, 'flags'] | 1024
+                    #else:
+                    #    flag_reg.insert(i, pdf.loc[i, 'flags'])
+                process_next = False
+                process_start = False
+
+                index_d.clear()
+                read_qual_d.clear()
+                j=0
+        
+        #********************************************************#
+
+        name = args.path.split('/')[-2] 
+        headerpath=sorted(glob.glob(args.path+'bams/header_'+'*.sam'))
+        #headerpath=sorted(glob.glob(args.path+'bams/header.sam'))
+        samfile = pysam.AlignmentFile(headerpath[1])
+        header = samfile.header
+        #print(header)
+        samfile.close()
+ 
+
+        ##/scratch-shared/tahmad/bio_data/FDA/Illumnia/HG003/8/bams/
+        sam_name=args.path+'bams/'+name+'_'+part+'.bam'
+        print(sam_name)
+        #len_pdf=len(pdf.index)
+
+        table=pa.Table.from_pandas(pdf)
+        d = table.to_pydict()
+        with pysam.AlignmentFile(sam_name, "wb", header=header) as outf:
+            for qNames,flags,rIDs,beginPoss, mapQs,cigars,rNextIds,pNexts,tLens,seqs,quals,tagss in zip(d['qNames'], d['flags'], d['rIDs'], d['beginPoss'], d['mapQs'], d['cigars'], d['rNextIds'], d['pNexts'], d['tLens'], d['seqs'], d['quals'], d['tagss']):
+        
+
+        
+
+            #for i in range(0, len_pdf-1):
+                #if i in duplicates:
+                #    res_d.insert(i, sdf.loc[i, 'flags'] | 1024)
+                #else:
+                #    res_d.insert(i, sdf.loc[i, 'flags'])
+                #header = pysam.AlignmentHeader.from_dict(header)
+                a = pysam.AlignedSegment()#(header)
+                a.query_name = qNames #pdf.loc[i, 'qNames'] 
+
+                seq=seqs #pdf.loc[i, 'seqs']
+                if(seq=='*'):
+                    a.query_sequence= ""
+                else:
+                    a.query_sequence= seq
+
+                a.flag = flags #pdf.loc[i, 'flags']
+                #a.reference_name=pdf.loc[i, 'rIDs']
+                
+                a.reference_start = beginPoss-1 #pdf.loc[i, 'beginPoss']-1
+                #print(a.reference_start)
+                a.mapping_quality = mapQs #pdf.loc[i, 'mapQs']
+                a.cigarstring = cigars #pdf.loc[i, 'cigars']
+                #a.next_reference_name=pdf.loc[i, 'rNextIds']
+
+                pNextsvalue=pNexts #pdf.loc[i, 'pNexts']
+                if(pNextsvalue ==0):
+                    a.next_reference_start= -1 #int(pdf.loc[i, 'pNexts'])
+                else:
+                    a.next_reference_start=pNextsvalue
+
+                a.template_length= tLens #pdf.loc[i, 'tLens']
+                if(seq=='*'):
+                    a.query_qualities= ""
+                else:
+                    a.query_qualities = pysam.qualitystring_to_array(quals) #pdf.loc[i, 'quals'])
+                #a.tags = (("NM", 1), ("RG", "L1"))
+                items = tagss.split('\'') #pdf.loc[i, 'tagss'].split('\'')
+                #print(items)
+                for item in items[1:]:
+                    sub = item.split(':')
+                    a.set_tag(sub[0], sub[-1])
+
+                #a.reference_name=pdf.loc[i, 'rIDs']
+                #try:
+                #    a.next_reference_name=pdf.loc[i, 'rNextIds']
+                #except:
+                #    a.next_reference_name="*"
+                '''
+                rid=pdf.loc[i, 'rIDs']
+                if(rid=="chrM"):
+                    a.reference_id=-1
+                elif(rid=="chrX"):
+                    a.reference_id=22
+                elif(rid=="chrY"):
+                    a.reference_id=23
+                else:
+                    chrno=rid.replace("chr", "")
+                    a.reference_id = chrno-1
+                '''
+                a.reference_id=rIDs-1 #pdf.loc[i, 'rIDs']-1
+                '''
+                rnid=pdf.loc[i, 'rNextIds']
+                if(rnid=="chrM"):
+                    a.next_reference_id=-1
+                elif(rnid=="chrX"):
+                    a.next_reference_id=22
+                elif(rnid=="chrY"):
+                    a.next_reference_id=23
+                else:
+                    chrno=rnid.replace("chr", "")
+                    a.next_reference_id = int(chrno)-1
+                '''
+                a.next_reference_id = -1
+
+                outf.write(a)
+
+        index_path='samtools index ' + sam_name
+        os.system(index_path)
+
+        return  pdf[['flags']] #pdf.loc[:, 'flags'] #pd.DataFrame({'flags': res_d})
+
+    return df.groupby(by).applyInPandas(sam_operations, schema="flags integer")
+
+#########################################################
+def arrow_data_collection(path):
+    with pa.RecordBatchFileReader(path) as reader:
+        batch = reader.get_batch(0)
+    #print(batch.to_pandas())
+    return batch
+
+def process_output(itern):
+    arrow_file_list = sorted(glob.glob(args.path+'arrow/'+CHRMS[itern]+"_" + "*.arrow"))
+    #print(arrow_file_list)
+    ardd = spark.sparkContext.parallelize(arrow_file_list, len(arrow_file_list)).map(arrow_data_collection)
+    df = spark.createFromArrowRecordBatchesRDD(ardd).orderBy('beginPoss', ascending=True).coalesce(1)
+    if(args.aligner=="Minimap2"):
+        df = df.select(split(df.sam,"\t")).rdd.flatMap(lambda x: x).toDF(schema=["qNames","flags","rIDs","beginPoss", "mapQs", "cigars", "rNextIds", "pNexts", "tLens", "seqs", "quals", "tagss"])
+    #print(df)
+    if(args.aligner=="Minimap2"):
+        long_reads_write_bam(df, by="rIDs", part=arrow_file_list[0].split('_')[-2]).show() #
+    else:
+        short_reads_write_bam_alt(df, by="rIDs", part=arrow_file_list[0].split('_')[-2]).show() #
+    df.unpersist(True)
+    
+    return 1
+#######################################################
+
+def run_Minimap2(fqfile):
     print(fqfile)
 
     ## importing socket module
-    #import socket
+    import socket
     ## getting the hostname by socket.gethostname() method
-    #hostname = socket.gethostname()
-    ## getting the IP address using socket.gethostbyname() method
-    #ip_address = socket.gethostbyname(hostname)
-    os.system("plasma_store_server -m 8000000000 -s /tmp/store0 &")
-    #cmd='./bwa mem -t 2 /home/tahmad/GenData/hg19.fasta' + ' ' + files[0] +' ' + files[1]
-    #os.system("/home/tahmad/tahmad/apps/bwa/bwa mem -t 16 /home/tahmad/mcx/bio_data/ucsc.hg19.fasta" + " " + files + " " + ">" +" " + files+".sam")
-    out = fqfile[0]+'.sam'
-    #cmd = ['/home/tahmad/tahmad/apps/bwa/bwa', 'mem', '-t 16', '/home/tahmad/mcx/bio_data/ucsc.hg19.fasta', files, '>', out]
-    #cmd = ['/home/tahmad/tahmad/bwa', 'mem', '-t 16', '/home/tahmad/mcx/bio_data/ucsc.hg19.fasta', files[0], files[1]]
-    #cmd = ['/home/tahmad/tahmad/bwa', 'mem', '-t 16', '/home/tahmad/mcx/bio_data/ucsc.hg19.fasta', '/home/tahmad/mcx/bio_data/ERR001268_1_400_lines.fastq', '/home/tahmad/mcx/bio_data/ERR001268_2_400_lines.fastq']
-    #cmd = ['/home/tahmad/tahmad/bwa', 'mem', '-t 16', '/home/tahmad/mcx/bio_data/ucsc.hg19.fasta', files]
-    #print(cmd)
-    #cmd = ['/home/tahmad/tahmad/bwa', 'mem', '-t 16', '/home/tahmad/mcx/bio_data/ucsc.hg19.fasta', '/home/tahmad/mcx/bio_data/ERR001268/ERR001268_1.fastq.gz', '/home/tahmad/mcx/bio_data/ERR001268/ERR001268_2.fastq.gz']
-    #cmd = ['/home/tahmad/tahmad/bwa', 'mem', '-t 24', '/home/tahmad/mcx/bio_data/ucsc.hg19.fasta', fqfile]
-    cmd = ['/home/tahmad/tahmad/bwa', 'mem', '-t 12', '/home/tahmad/mcx/bio_data/ucsc.hg19.fasta', fqfile[0], fqfile[1]]
-    #cmd = ['/home/tahmad/tahmad/BWA/new/bwa/bwa', 'mem', '-t 20', '/home/tahmad/mcx/bio_data/ucsc.hg19.fasta', fqfile[0], fqfile[1], '-o', out]
-    #cmd = ['/home/tahmad/tahmad/bwa', 'mem', '-t 2', '/home/tahmad/mcx/bio_data/ucsc.hg19.fasta', '/scratch-shared/tahmad/bio_data/ERR001268/ERR001268-4-seqk/ERR001268_1.filt.part_001.fastq.gz', '/scratch-shared/tahmad/bio_data/ERR001268/ERR001268-4-seqk/ERR001268_2.filt.part_001.fastq.gz']
-    #os.system(cmd)
-    #print(execute(
-    #    cmd,
-    #    lambda x: print("STDOUT: %s" % x),
-    #    lambda x: print("STDERR: %s" % x),
-    #))
-    #with open("/home/tahmad/tahmad/log.txt", "w") as log:
+    hostname = socket.gethostname()
+
+    name=args.path.split('/')[-2]
+    plfm=args.path.split('/')[-3]
+    rg='@RG\\tID:'+name+'\\tSM:sample\\tPL:'+plfm+'\\tLB:sample\\tPU:lane' 
+    print(rg)
+    os.system('whoami')
+    #access='sudo -S chmod -R 777 '+args.path+'bams/' 
+    #os.system(access)
+    
+    out = name+'_header_'+hostname+'.sam' 
+    out = args.path+'parts/'+name+'_header_'+hostname+'.sam' 
+
+    rg='@RG\tID:'+name+'\tSM:sample\tPL:'+plfm+'\tLB:sample\tPU:lane'
+    #cmd='minimap2 -a -k 19 -O 5,56 -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no '+ ' -t '+ CORES + ' '+ REF + ' ' + fqfile + ' -o ' + out
+    cmd = ['/usr/local/bin/minimap2', '-a',  '-k 19',  '-O 5,56',  '-E 4,1',  '-B 5',  '-z 400,50',  '-r 2k',  '--eqx',  '--secondary=no', '-R', rg, '-t', CORES, REF, fqfile, '-o', out]
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     process.wait()
-    '''
-    # Connect to the plasma store.
-    prdd=[]
-    connect()
-    lines = [line[:20] for line in open('/home/tahmad/tahmad/objID.txt')]
-    lines = lines[:2]
-    object_ids = [plasma.ObjectID(byte) for byte in lines]
-    buffers = client.get_buffers(object_ids)
-    #return [pa.read_record_batch(pa.BufferReader(buf), arrow_schema()) for buf in buffers]
 
-    for k in range(len(object_ids)):
-        batch = pa.read_record_batch(buffers[k], arrow_schema())#.to_pandas()
-        prdd.append(batch)
-    os.system("kill $(pidof plasma_store_server)")
-    '''
+    return hostname
+
+def streaming_Minimap2(path):
+    os.system('whoami')
+    #/scratch-shared/tahmad/bio_data/FDA/HG002/
+    file_name = path.split('/')[-2]
+    #parts=path.split('/')[-1]
+    cmd = 'seqkit split2 --threads='+CORES+ ' ' +args.path + file_name +'.fastq -p '+NODES+' -O '+ args.path + 'parts' +' -f'
+    os.system(cmd)
     return 1
 
-def ArrowDataCollection(chr_id):
-    #Connect to the plasma store.
-    #connect()
-    lines = [line[:20] for line in open('/dev/shm/objID.txt')]
-    lines = lines[:65]
-    print(lines)
-    object_ids = [plasma.ObjectID(bytes(byte.encode())) for byte in lines]
-    #Connect to the plasma store.
-    connect()
-    [buffers] = client.get_buffers([object_ids[chr_id]])#(b'u$a71i0Rkk*1LkQ46d2D')])
-    batch = pa.read_record_batch(buffers, _schema())#.to_pandas()
-    
-    #if(chr_id==64):
-    #    os.system("kill $(pidof plasma_store_server)")
-    return batch
+def process_Minimap2(path):
+    time.sleep(15)
+    #/scratch-shared/tahmad/bio_data/FDA/HG002/
+    file_name = path.split('/')[-2]
+    file_names = sorted(glob.glob(args.path+'parts/'+file_name+".part_"+ "*.fastq"))
+    frdd = spark.sparkContext.parallelize(file_names, len(file_names))
+    frdd = frdd.map(run_Minimap2).collect()
+    return 1
 
+#########################################################
+
+#########################################################
+
+def run_BWA(fqfile):
+    print(fqfile)
+    ## importing socket module
+    import socket
+    ## getting the hostname by socket.gethostname() method
+    hostname = socket.gethostname()
+   
+    name=args.path.split('/')[-2]
+    plfm='Illumnina'#args.path.split('/')[-3]
+ 
+    out = args.path+'bams/header'+'_'+hostname+'.sam'
+    rg='@RG\\tID:'+name+'\\tSM:sample\\tPL:'+plfm+'\\tLB:sample\\tPU:lane'
+
+    cmd = ['/usr/local/bin/bwa', 'mem', '-R', rg, '-t', CORES, REF, fqfile[0], fqfile[1], '-o', out]
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    process.wait()
+
+    return hostname
+
+def streaming_BWA(path):
+    #/scratch-shared/tahmad/bio_data/FDA/HG002/
+    file_name = path.split('/')[-2]
+    #sudo seqkit split2 --threads=8 -1 /mnt/fs_shared/query/ERR001268/ERR001268_1.fastq -2 /mnt/fs_shared/query/ERR001268/ERR001268_2.fastq -p 2 -O /mnt/fs_shared/query/ERR001268/parts -f
+    cmd = 'seqkit split2 --threads='+ CORES +' -1 '+ path + file_name +'_1.fastq -2 '+ path + file_name  +'_2.fastq -p '+NODES+' -O '+ args.path + 'parts' +' -f'
+    #os.system(cmd)
+    return 1
+
+def process_BWA(path):
+    time.sleep(5)
+    #/scratch-shared/tahmad/bio_data/FDA/HG002/
+    name = path.split('/')[-2]
+    file_names_r1 = sorted(glob.glob(args.path+'parts/'+name+"_1.part_"+ "*.fastq"))
+    file_names_r2 = sorted(glob.glob(args.path+'parts/'+name+"_2.part_"+ "*.fastq"))
+    fqfile = list(zip(file_names_r1, file_names_r2))
+    frdd = spark.sparkContext.parallelize(fqfile, len(fqfile))
+    frdd = frdd.map(run_BWA).collect()
+    return 1
+
+#########################################################
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+requiredNamed = parser.add_argument_group('Required arguments')
+
+parser.add_argument("-standalone",  "--standalone",  help="Standalone mode.", type=str, default='no')
+parser.add_argument("-utilspath",  "--utilspath",  help="Utils path.", type=str, default='no')
+
+requiredNamed.add_argument("-part",  "--part",  help="Part number of pipeline", required=True)
+requiredNamed.add_argument("-ref",  "--ref",  help="Reference genome file with .fai index", required=True)
+requiredNamed.add_argument("-nodes",  "--nodes",  help="Number of nodes", required=True)
+requiredNamed.add_argument("-path",  "--path",  help="Input FASTQ path", required=True)
+requiredNamed.add_argument("-cores",  "--cores",  help="Number od cores on each node", required=True)
+requiredNamed.add_argument("-aligner",  "--aligner",  help="Aligner (BWA or Minimap2)", required=True)
+requiredNamed.add_argument("-vcaller",  "--vcaller",  help="Variant Caller (DeepVariant or Octopus)", required=True)
+
+args = parser.parse_args()
+
+CORES=args.cores
+NODES=args.nodes
+REF=args.ref
+BAM_FILES=[]
+#########################################################
 def hostname(x):
     ## importing socket module
     import socket
@@ -276,476 +890,156 @@ def hostname(x):
     ## getting the IP address using socket.gethostbyname() method
     ip_address = socket.gethostbyname(hostname)
     return [hostname,ip_address]
-
-def rb_return(ardd):
-    data = [
-        pa.array(range(5), type='int16'),
-        pa.array([-10, -5, 0, None, 10], type='int32')
-    ]
-    schema = pa.schema([pa.field('c0', pa.int16()),
-                        pa.field('c1', pa.int32())],
-                       metadata={b'foo': b'bar'})
-    return pa.RecordBatch.from_arrays(data, schema)
-
-
 #########################################################
-def qual_score_by_cigar(cigars):
-    qpos = 0
-    parts = CIGAR_REGEX.findall(cigars)
-    for y in range(0, len(parts)):
-        op = parts[y][1] 
-        if op == BAM_CMATCH or \
-            op == BAM_CINS or \
-            op == BAM_CSOFT_CLIP or \
-            op == BAM_CEQUAL or \
-            op == BAM_CDIFF:
-                   qpos += int(parts[y][0])    
-    return qpos
-#########################################################
-def mean_qual(quals):
-    qual = [ord(c) for c in quals]
-    mqual = (1 - 10 ** (np.mean(qual)/-10))
-    return mqual
-#########################################################
-    
-def sam_operations_pairs(pdf):
- 
-    res_d=[]
-    process_next = False
-    process_start = False
-
-    index_d=[]
-    read_qual_d=[]
-    j=0
-    # fields to store for each alignment
-    #fields = ['index','read_qual']
-    #data = {f: list() for f in fields}
-    
-    len_pdf=len(pdf.index)
-    for i in range(0, len_pdf-1):
-        if int(pdf.loc[i+1, 'beginPoss']) == int(pdf.loc[i, 'beginPoss']) and int(pdf.loc[i+1, 'pNexts']) == int(pdf.loc[i, 'pNexts']): 
-            #if process_next == False and process_start == False:
-                # fields to store for each alignment
-                #fields = ['index','read_qual']
-                #data = {f: list() for f in fields}
-             
-            index_d.insert(j, i)
-            read_qual_d.insert(j, mean_qual(pdf.loc[i, 'quals']))
-            j=j+1
-            #data['index'].append(i)
-            #data['read_qual'].append(mean_qual(pdf.loc[i, 'quals']))
-            process_next = True
-        else: 
-            process_start = True
-            res_d.insert(i, int(pdf.loc[i, 'flags']))
-
-        if process_next == True and process_start == True:
-            #sdf = pd.DataFrame(data)
-            #rq = sdf["read_qual"]
-            read_qual_index = read_qual_d.index( max(read_qual_d) ) 
-
-            for i in range(0, len(read_qual_d)):
-                if i == read_qual_index:
-                    #res_d.insert(sdf.loc[i, 'index'], int(pdf.loc[i, 'flags']))
-                    res_d.insert(index_d[i], int(pdf.loc[i, 'flags'])) 
-                else: 
-                    #res_d.insert(sdf.loc[i, 'index'], int(pdf.loc[i, 'flags']) | 1024)  
-                    res_d.insert(index_d[i], int(pdf.loc[i, 'flags']) | 1024)
-            process_next = False 
-            process_start = False
- 
-            index_d.clear()
-            read_qual_d.clear()
-            j=0
-
-             
-    res_d.insert(len_pdf, int(pdf.loc[len_pdf-1, 'flags']))
-    
-    return  pd.DataFrame({'flags': res_d})
-
-#######################################################################################################
-
-def sam_operations(pdf):
-    # fields to store for each alignment
-    fields = ['query_md5', 'flags','ref_start','ref_end','query_length','read_qual','num_passes']
-    data = {f: list() for f in fields}
-
-    for i in range(1, len(pdf)):
-        data['query_md5'].append(hashlib.md5(pdf.loc[i, 'qNames'].encode('utf-8')).hexdigest())
-        data['flags'].append(int(pdf.loc[i, 'flags']))
-        data['ref_start'].append(int(pdf.loc[i, 'beginPoss']))
-        data['ref_end'].append(int(pdf.loc[i, 'pNexts']))
-        data['query_length'].append(int(qual_score_by_cigar(pdf.loc[i, 'cigars'])))
-        #if read.has_tag('rq'):
-            #data['read_qual'].append(None)#float(read.get_tag('rq')))
-        #elif read.query_qualities:
-        data['read_qual'].append(mean_qual(pdf.loc[i, 'quals']))
-        #if read.has_tag('np'):
-        data['num_passes'].append(None)#int(read.get_tag('np')))
-        #data['dup'].append(False)
-        #data['dup_index'].append(None)
-        
-    #if not data['read_qual']:
-    #    data.pop('read_qual', None)
-    #    fields.remove('read_qual')
-    #if not data['num_passes']:
-    #    data.pop('num_passes', None)
-    #    fields.remove('num_passes')
-        
-    sdf = pd.DataFrame(data)
-        
-    res_d=[]
-    by = ['read_qual', 'num_passes', 'query_md5']
-    ascending = [False, False, True]
-    columns = ['dup','dup_index']
-    df = pd.DataFrame(([False, None] for i in range(len(sdf))), columns=columns)
-    dup_index = 0
-    dup_state = False
-    for i in range(1, len(sdf)):
-        if abs(sdf.loc[i-1, 'ref_start'] - sdf.loc[i, 'ref_start']) <= 2 and abs(sdf.loc[i, 'ref_end'] - sdf.loc[i-1, 'ref_end']) <= 2 and abs(sdf.loc[i-1, 'query_length'] - sdf.loc[i, 'query_length']) <= 10/100.0 * sdf.loc[i, 'query_length']: 
-            df.loc[[i, i-1], 'dup'] = True  # mark this read and previous read
-            df.loc[[i, i-1], 'dup_index'] = dup_index  # a block of duplicates
-            dup_state = True  # in the middle of a block of duplicates
-        elif dup_state:
-            dup_state = False
-            dup_index += 1
-            
-    for i in range(0, dup_index):
-        df.loc[sdf[df['dup_index'] == i].sort_values(by=by, ascending=ascending).index[0], 'dup'] = False
-
-    duplicates = sdf[df['dup']].index.values
-    for i in range(0, len(sdf)):
-        if i in duplicates:
-            res_d.insert(i, sdf.loc[i, 'flags'] | 1024)
-        else: 
-            res_d.insert(i, sdf.loc[i, 'flags'])
-            
-    return  pd.DataFrame({'flags': res_d})
-        
-    #return pd.DataFrame(data)
-       
-#########################################################
-
-
-
-def arrow_data_process(i):
-    print(i)
-    ardd = spark.sparkContext.parallelize([i,i,i,i,i,i,i,i,i,i,i,i,i,i,i,i], 16).map(ArrowDataCollection)
-    df = spark.createFromArrowRecordBatchesRDD(ardd)
-    sorted_sdf = df.orderBy('beginPoss', ascending=True)
-    #sorted_sdf.show()
-    if(not sorted_sdf.rdd.isEmpty()):
-        sam_df = sorted_sdf.select(split(sorted_sdf.sam,"\t")).rdd.flatMap(lambda x: x).toDF(schema=["qNames","flags","rIDs","beginPoss", "mapQs", "cigars", "rNextIds", "pNexts", "tLens", "seqs", "quals", "tagss"])
-        md_df = sam_df.groupby("rIDs").applyInPandas(sam_operations_pairs, schema="flags integer")
-        #md_df.show()
-        #md_df.write.option("sep", "\t").option("encoding", "UTF-8").csv('/home/tahmad/tahmad/outputs/output'+str(i)+'.csv')
-
-    return 1
-
-def bwa_process(path):
-    
-    file_names1 = sorted(glob.glob(path+"-4-seqk/ERR001268_1"+ "*.fastq.gz"))
-    file_names2 = sorted(glob.glob(path+"-4-seqk/ERR001268_2"+ "*.fastq.gz"))
-    #file_names1 = sorted(glob.glob(path+"-4-seqk/ERR001268_1.filt.part_001"+ "*.fastq.gz"))
-    #file_names2 = sorted(glob.glob(path+"-4-seqk/ERR001268_2.filt.part_001"+ "*.fastq.gz"))
-    print(file_names1)
-    print(file_names2)
-    fqfile = list(zip(file_names1, file_names2))
-    
-    #runBWA(fqfile)
-    frdd = spark.sparkContext.parallelize(fqfile, len(fqfile))
-    frdd = frdd.map(runBWA).collect() 
-    return 1
-
-def streaming_process(path):
-    cmd = '/home/tahmad/tahmad/seqkit split2 --threads=18 -1 '+ path +'_1.filt.fastq.gz -2 '+ path +'_2.filt.fastq.gz -p 4 -O '+ path +'-4-seqk -f'
-    os.system(cmd)
-    return 1
 
 if __name__ == '__main__':
     spark = SparkSession \
         .builder \
-        .appName("Python Arrow-in-Spark example") \
+        .appName("Variant calling workflow") \
         .getOrCreate()
 
     # Enable Arrow-based columnar data transfers
-    spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-
-    #os.system("plasma_store_server -m 3000000000 -s /tmp/store0 & ./bwa mem -t 24 /home/tahmad/mcx/bio_data/ucsc.hg19.fasta /home/tahmad/mcx/bio_data/gcat_025_1a.fastq /home/tahmad/mcx/bio_data/gcat_025_2a.fastq")
-#    os.system("plasma_store_server -m 3000000000 -s /tmp/store0 &")
-#    cmdStr = ['./bwa', 'mem', '-t 4', '/home/tahmad/GenData/hg19.fasta',
-#            '/home/tahmad/GenData/gcat_025_1a.fastq',
-#            '/home/tahmad/GenData/gcat_025_2a.fastq']
-    cmdStr = ['./bwa', 'mem', '-t 2', '/home/tahmad/GenData/hg19.fasta',
-            '/home/tahmad/GenData/ERR001268_1_400_lines.fastq',
-            '/home/tahmad/GenData/ERR001268_2_400_lines.fastq']
-    #print(execute(
-    #    cmdStr,
-    #    lambda x: print("STDOUT: %s" % x),
-    #    lambda x: print("STDERR: %s" % x),
-    #))
-    file_names1 = sorted(glob.glob("/home/tahmad/mcx/bio_data/input/ERR001268_1" + "*.fastq"))
-    file_names2 = sorted(glob.glob("/home/tahmad/mcx/bio_data/input/ERR001268_2" + "*.fastq"))
-    #file_names1 = sorted(glob.glob("/home/tahmad/GenData/gcat_025_1a" + ".fastq"))
-    #file_names2 = sorted(glob.glob("/home/tahmad/GenData/gcat_025_2a" + ".fastq"))
-    
-    file_names = list(zip(file_names1, file_names2))
-    #file_names = sorted(glob.glob("/home/tahmad/tahmad/SparkGA2/chunks/" + "*.fq.gz"))
-    print(file_names)
-    #inData=spark.sparkContext.parallelize(file_names, 3).coalesce(3)
-    #print(inData.collect())
-    #print(file_names)
-    start = time.time()
-    outIDs = spark.sparkContext.parallelize([0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7],32).map(lambda x: hostname(x)).collect()
-    outIDs = spark.sparkContext.parallelize([0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7],32).map(lambda x: hostname(x)).collect()
-    #outIDs = spark.sparkContext.parallelize([0,1,2,3,4],5).map(lambda x: hostname(x)).collect()
-    #outIDs = spark.sparkContext.parallelize([0,1,2,3,4],5).map(lambda x: hostname(x)).collect()
+    spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+    print("BWA started...")
+    outIDs = spark.sparkContext.parallelize([0,1],2).map(lambda x: hostname(x)).collect() 
     print(outIDs)
-    #prdd = spark.sparkContext.parallelize([0],1).map(runBWA)
-    stop = time.time()
-    print('BWA flatMap took {} seconds.'
-          .format(stop - start))
-     
-    #print(outIDs)
-    os.system("which singularity")
-    #print(spark.sparkContext.parallelize(list(range(1000))).flatMap(lambda x: hostname(x)).collect())
-    #print("**********************************************************************")
-    #print(spark.sparkContext.parallelize(list(range(100))).map(lambda x: hostname(x)).collect()) 
-    start = time.time() 
-    #prdd = spark.sparkContext.parallelize([0],1).map(ArrowDataCollection).cache()#.collect()
-    stop = time.time()
-    print('BWA flatMap ArrowDataCollection took {} seconds.'
-          .format(stop - start))
-    #SparkSession.createFromArrowRecordBatchesRDD = createFromArrowRecordBatchesRDD
-    #batches.append(pdf1[0])
-    #batches.append(pdf1[1])
-
-    #start = time.time()
-    #rdd_batch = []
-    #rdd_batch.append(batch[i] for batch in batches[i][0])
-    #rdd_batch.append(batches[1][0])
-    #rdd_batch.append(batches[2][0])
-
-    #sdf1 = spark.sparkContext.parallelize([0])
-    #sdf = spark.createFromArrowRecordBatchesRDD(sdf1, rdd_batch)
-    #stop = time.time()
-    #print('BWA flatMap SDF Creation [chr-1] took {} seconds.'
-    #      .format(stop - start))
-
-    #start = time.time()
-    #result_sdf = sdf.sortWithinPartitions('beginPoss', ascending=True).orderBy('beginPoss', ascending=True) 
-    #result_sdf = sdf.orderBy('beginPoss', ascending=True)
-    #stop = time.time()
-    #print('BWA flatMap sorting took {} seconds.'
-    #      .format(stop - start))
-    #result_sdf.show()
     
-    #rdd_batch1 = []
-    #rdd_batch1.append(batches[0][1])
-    #rdd_batch1.append(batches[1][1])
-    #rdd_batch1.append(batches[2][1])
+    #path="/scratch-shared/tahmad/bio_data/FDA/Illumina/HG003/"
+    OUTDIR=args.path
+    ARROWOUT=OUTDIR+'arrow'
+    BAMOUT=OUTDIR+'bams'
+    PARTSOUT=OUTDIR+'parts'
 
-    #sdf = spark.createFromArrowRecordBatchesRDD(sdf1, rdd_batch1)
-    #start = time.time()
-    #result_sdf = sdf.sortWithinPartitions('beginPoss', ascending=True).orderBy('beginPoss', ascending=True)
-    #result_sdf = sdf.orderBy('beginPoss', ascending=True)
-    #stop = time.time()
-    #print('BWA flatMap sorting took {} seconds.'
-    #      .format(stop - start))
+    #frdd = spark.sparkContext.parallelize(["a","b"], 2)
+    #frdd = frdd.map(run_Minimap2).collect()
 
-    #result_sdf.show()
+    if(args.part=="1"):    
+        ####################################
+        start = time.time()
+        #################################### 
+        print("Part-1")
+           
+        #if os.path.exists(ARROWOUT):
+        #    shutil.rmtree(ARROWOUT)
+        #if os.path.exists(BAMOUT):
+        #    shutil.rmtree(BAMOUT)
+        #if os.path.exists(PARTSOUT):
+        #    shutil.rmtree(PARTSOUT)
+        #try:
+        #    os.mkdir(PARTSOUT)
+        #except OSError:
+        #    print ("Creation of the directory %s failed" % PARTSOUT)
+        #else:
+        #    print ("Successfully created the directory %s " % PARTSOUT)
+        #try:
+        #    os.mkdir(ARROWOUT)
+        #except OSError:
+        #    print ("Creation of the directory %s failed" % ARROWOUT)
+        #else:
+        #    print ("Successfully created the directory %s " % ARROWOUT)
 
-    #file_names1 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/NA12878/SRR029655-8-seqk/SRR029655_1.filt.part_" + "*.fastq.gz"))
-    #file_names2 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/NA12878/SRR029655-8-seqk/SRR029655_2.filt.part_" + "*.fastq.gz"))
-    #file_names1 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-8-seqk/ERR194147_1.part_" + "*.fastq"))
-    #file_names2 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-8-seqk/ERR194147_2.part_" + "*.fastq"))
-    '''
-    file_names1 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-32-seqk/ERR194147_1.part_" + "*.fastq"))
-    file_names2 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-32-seqk/ERR194147_2.part_" + "*.fastq"))
+        #try:
+        #    os.mkdir(BAMOUT)
+        #except OSError:
+        #    print ("Creation of the directory %s failed" % BAMOUT)
+        #else:
+        #    print ("Successfully created the directory %s " % BAMOUT)
+        
+        if(args.aligner=="Minimap2"):
+        
+            job1 = multiprocessing.Process(target=streaming_Minimap2, args=(args.path,))
+            job1.start()
+            job2 = multiprocessing.Process(target=process_Minimap2, args=(args.path,))
+            job2.start()
+            # Wait for both jobs to finish
+            job1.join()
+            job2.join()
+        
+            #process_Minimap2(args.path)
+
+        elif(args.aligner=="BWA"):
+            job1 = multiprocessing.Process(target=streaming_BWA, args=(args.path,))
+            job1.start()
+            job2 = multiprocessing.Process(target=process_BWA, args=(args.path,))
+            job2.start()
+            # Wait for both jobs to finish
+            job1.join()
+            job2.join()
+        
+        ####################################
+        stop = time.time()
+        print('minimap2 took {} seconds.'
+              .format(stop - start))
+        ####################################
+    elif(args.part=="2"):
+        print("Part-2")
+        
+        SparkSession.createFromArrowRecordBatchesRDD = createFromArrowRecordBatchesRDD
+
+        ####################################
+        start = time.time()
+        ####################################
+
+        PARTS=128
+
+        #for x in range(0, PARTS, int(NODES)+8):
+        #    p = ThreadPool(int(NODES)+8)
+        #    p.map(process_output, range(x, int(NODES)+8+x, 1))
+
+        p = ThreadPool(10)
+        p.map(process_output, range(10))
+
+        #process_output(0)
+        ####################################
+        stop = time.time()
+        print('BAM output took {} seconds.'
+              .format(stop - start))
+        ####################################
+        
+    elif(args.part=="3"):
+        print("Part-3")
+        '''
+        if(args.standalone=="yes"):
+            name = args.path.split('/')[-2]
+            chunking_cmd=args.utils+'chunking.sh '+ CORES +' '+ args.path+name
+            process = subprocess.Popen(chunking_cmd, stdout=subprocess.PIPE)
+            process.wait()
+        
+        files_bam = sorted(glob.glob(BAMOUT+'*_chr'+'*.bam'), key=os.path.getsize)
+
+        #for x in range(0, PARTS, int(NODES)):
+
+        #    files_bam_part=files_bam[x:x+int(NODES)]
+        #    brdd = spark.sparkContext.parallelize(files_bam_part, len(files_bam_part))
+        #    brdd = brdd.map(runDeepVariant).collect()
+        '''
+        BAM_FILES=sorted(glob.glob(args.path+'bams/'+'*.bam'), key=os.path.getsize)
+        print(BAM_FILES)
+        brdd = spark.sparkContext.parallelize(list(range(int(NODES))), int(NODES))
+
+        if(args.vcaller=='DeepVariant'):
+            brdd = brdd.map(runDeepVariantBWA).collect()
+        elif(args.vcaller=='Octopus'):
+            brdd = brdd.map(runOctopusBWA).collect()
+
+        #runDeepVariant(sorted(glob.glob(args.path+'bams/*.bam'))[0])
     
-    
-    fqfile = list(zip(file_names1, file_names2))
-    '''
-    #print(fqfile)
-    #fqfile = sorted(glob.glob("/home/tahmad/tahmad/SparkGA2/chunks-ERR001268/" + "*.fq.gz"))
-    
-    #file_names1 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-2x-seqk/ERR194147-2x-32-seqk/ERR194147_1.part_" + "*.fastq"))
-    #file_names2 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-2x-seqk/ERR194147-2x-32-seqk/ERR194147_2.part_" + "*.fastq"))
-    ####################################
-    '''
-     path="/scratch-shared/tahmad/bio_data/ERR001268/ERR001268"
-   
-    job1 = multiprocessing.Process(target=streaming_process, args=(path,))
-    job1.start()
-    job2 = multiprocessing.Process(target=bwa_process, args=(path,))
-    job2.start()
-    # Wait for both jobs to finish
-    job1.join()
-    job2.join()
-    '''
-    ####################################
-    
-    file_names1 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR001268/ERR001268-16-seqk/ERR001268_1.filt.part_" + "*.fastq.gz"))
-    file_names2 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR001268/ERR001268-16-seqk/ERR001268_2.filt.part_" + "*.fastq.gz"))
-    
-    #file_names1 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-4-seqk/ERR194147_1.part"+"*.fastq.gz"))
-    #file_names2 = sorted(glob.glob("/scratch-shared/tahmad/bio_data/ERR194147/ERR194147-4-seqk/ERR194147_2.part"+"*.fastq.gz"))
+    elif(args.part=="4"):
+        print("Part-4")
+        mergevcf=args.path+'vcfmerge.sh '+args.path+'bams/'
+        os.system(mergevcf)
 
-    fqfile = list(zip(file_names1, file_names2))
+        cmd=['/usr/local/bin/singularity', 'exec', '-B /mnt/fs_shared/:/mnt/fs_shared/', '/mnt/fs_shared/hap.py_v0.3.12.sif', '/opt/hap.py/bin/hap.py', '/mnt/fs_shared/benchmarks/HG003/HG003_GRCh38_1_22_v4.2_benchmark.vcf.gz', '/mnt/fs_shared/query/HG003/bams/query.dv_merged.vcf', '-f /mnt/fs_shared/benchmarks/HG003/HG003_GRCh38_1_22_v4.2_benchmark.bed', '-r /mnt/fs_shared/reference/GRCh38.fa', '-o /mnt/fs_shared/benchmarks/HG003/happy.output', '--pass-only', '-l chr20', '--engine=vcfeval', '--threads=2']
+        #process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        #process.wait()
 
-    frdd = spark.sparkContext.parallelize(fqfile, len(fqfile))
-    frdd = frdd.map(runBWA).collect()
-     
-    SparkSession.createFromArrowRecordBatchesRDD = createFromArrowRecordBatchesRDD
-    
-    ardd = spark.sparkContext.parallelize([0],1).map(ArrowDataCollection)
-    df = spark.createFromArrowRecordBatchesRDD(ardd)
-    sorted_sdf = df.orderBy('beginPoss', ascending=True) 
-    sorted_sdf.show()
-    
-    '''    
-    file_bam = sorted(glob.glob("/scratch-shared/tahmad/bio_data/HG001_NA12878/HG001_NA12878-chr22" + ".bam"))
-    print(file_bam)
-    brdd = spark.sparkContext.parallelize(file_bam, len(file_bam))
-    brdd = brdd.map(runDeepVariant).collect()
-    '''
-    #ardd = spark.sparkContext.parallelize([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],16).map(ArrowDataCollection)
-    #df = spark.createFromArrowRecordBatchesRDD(ardd)
-    #sorted_sdf = df.orderBy('beginPoss', ascending=True) 
-    #sorted_sdf.show()
-
-    #Connect the processes in the pool.
-    #pool = Pool(initargs=(), processes=2)
-    #pool.map(arrow_data_process, range(2))
- 
-    p = ThreadPool(65)
-    p.map(arrow_data_process, range(65))
-    
-    '''
-    # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)
-    if isinstance(schema, (list, tuple)):
-        struct = from_arrow_schema(batch.schema)
-        for i, name in enumerate(schema):
-            struct.fields[i].name = name
-            struct.names[i] = name
-        schema = struct
-
-    # Create the Spark DataFrame directly from the Arrow data and schema
-    jrdd = spark._sc._serialize_to_jvm(batch, len(batch), ArrowSerializer())
-    jdf = spark._jvm.PythonSQLUtils.arrowPayloadToDataFrame(
-        jrdd, schema.json(), spark._wrapped._jsqlContext)
-    df = DataFrame(jdf, self._wrapped)
-    df._schema = schema
-    df.show()
-    #ardd = spark.sparkContext.parallelize([0,1,2],3).map(lambda x: rb_return(x)) 
-    #SparkSession.createFromPandasDataframesRDD = createFromPandasDataframesRDD
-    #sdf = spark.createFromPandasDataframesRDD(prdd)
-    #sdf.show()
-    '''
-    '''
-    sdf1 = spark.sparkContext.parallelize([0])
-    sdf = spark.createFromArrowRecordBatchesRDD(sdf1, batches[1])
-    result_sdf = sdf.sortWithinPartitions('beginPoss', ascending=True).orderBy('beginPoss', ascending=True)
-    result_sdf.show()
-
-    sdf1 = spark.sparkContext.parallelize([0])
-    sdf = spark.createFromArrowRecordBatchesRDD(sdf1, batches[1])
-    result_sdf = sdf.sortWithinPartitions('beginPoss', ascending=True).orderBy('beginPoss', ascending=True)
-    result_sdf.show()
-    '''
-    '''
-    sdf = spark.createFromArrowRecordBatchesRDD(sdf1, batches[1])
-    result_sdf = sdf.sortWithinPartitions('beginPoss', ascending=True).orderBy('beginPoss', ascending=True)
-    result_sdf.show()
-    '''
-    #result_pdf = sorted_sdf.select("*").toPandas().to_csv('csv.csv')
-    #print(result_pdf)
-    #chr1=[]
-    #chr1.append(outData[0][0])
-    #chr1.append(outData[2][0])
-    '''
-    Chr1= pa.Table.from_batches([outData[0][0], outData[2][0]])
-    resultChr1 = Chr1.to_pandas()
-    sdfChr1 = spark.createDataFrame(resultChr1)
-    sorted_sdfChr1 = sdfChr1.orderBy('beginPoss', ascending=True)
-    #print(result)
-    #df = batches_to_df(outData[0][0])
-    '''
-    '''
-    process = subprocess.Popen(['stdbuf', '-o0'] + cmdStr, stdout=subprocess.PIPE, universal_newlines=False)
-    #process.wait()
-    start = time.time()
-    #out = process.communicate() #(out, err) = process.communicate()
-    stop = time.time()
-    print('Pipe Buffers took {} seconds.'
-          .format(stop - start))
-    
-    #for line in iter(process.stdout.readline, ''):
-    #    print("<***> " + line.rstrip('\r'))
-    # Start the plasma store.
-    #p = subprocess.Popen(['plasma_store_server',
-    #                      '-s', '/tmp/store0'])
-    #print(out)
-    while True:
-        output = process.stdout.readline()
-        if output == '' and process.poll() is not None:
-            break
-        if output:
-            print ("<***>" + output.strip())
-    '''
-    #process.wait()
-    #view = memoryview(out[0])
-    #limited = view[0:2959]
-    #bytes(limited)
-    #print(limited.tobytes())
-    #dfs = get_dfs_arrow(out[0])
-    '''
-    buffer1 = pa.BufferReader(out[0][2960:2960+4304])#[0:2960])
-    batch1 = pa.read_record_batch(buffer1, schema())
-    df1 = batch1.to_pandas()
-    print(df1)
-    '''
-    '''
-    lines = [line[:20] for line in open('objID.txt')]
-    #print(lines)
-    object_ids = [plasma.ObjectID(byte) for byte in lines]
-    object_ids = object_ids[:len(lines)]
-    print(object_ids)
-
-    # Connect to the plasma store.
-    connect()
-
-    # Connect the processes in the pool.
-    pool = Pool(initializer=connect, initargs=(), processes=len(lines))
-
-    dfs = get_dfs_arrow(object_ids)
-    #print(dfs)
-    '''
-    '''
-    start = time.time()
-    sorted_df = dfs[0].sort_values(by='beginPoss')
-    stop = time.time()
-    print('Sort took {} seconds.'
-          .format(stop - start))
-
-
-    spark = SparkSession \
-        .builder \
-        .appName("Python Arrow-in-Spark example") \
-        .getOrCreate()
-
-    # Enable Arrow-based columnar data transfers
-    spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-
-    start = time.time()
-    sdf = spark.createDataFrame(dfs[0])
-    sorted_sdf = sdf.orderBy('beginPoss', ascending=True)
-    stop = time.time()
-    print('Sort took {} seconds.'
-          .format(stop - start))
-
-    spark.stop()
-    '''
- #   os.system("kill $(pidof plasma_store_server)")
+        t_vcf='/mnt/fs_shared/benchmarks/HG003/HG003_GRCh38_1_22_v4.2_benchmark.vcf.gz'
+        o_vcf='/mnt/fs_shared/query/HG003/bams/query.dv_merged.vcf.gz'
+        t_bed='/mnt/fs_shared/benchmarks/HG003/HG003_GRCh38_1_22_v4.2_benchmark.bed'
+        ref='/mnt/fs_shared/reference/GRCh38.fa'
+        
+        
+        cmd='/usr/local/bin/singularity exec -B /mnt/fs_shared/:/mnt/fs_shared/ /mnt/fs_shared/hap.py_latest.sif /opt/hap.py/bin/hap.py '+ t_vcf +' '+ o_vcf + ' -f '+ t_bed+ ' -r '+ ref+ ' -o ' + args.path+'happy.output --pass-only -l chr20 --engine=vcfeval --threads='+CORES
+        os.system(cmd)
 
     spark.stop()
