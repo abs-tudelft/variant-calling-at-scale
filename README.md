@@ -166,6 +166,7 @@ gcloud dataproc jobs submit pyspark --region=us-central1 --cluster=cluster-555  
 ```
 4. Repeat part `4` for merging VCFs and generating accuracy results using `hap.py` 
 
+The output should be like this:
 DeepVariant:
 ```
  Type Filter  TRUTH.TOTAL  TRUTH.TP  TRUTH.FN  QUERY.TOTAL  QUERY.FP  QUERY.UNK  FP.gt  METRIC.Recall  METRIC.Precision  METRIC.Frac_NA  METRIC.F1_Score  TRUTH.TOTAL.TiTv_ratio  QUERY.TOTAL.TiTv_ratio  TRUTH.TOTAL.het_hom_ratio  QUERY.TOTAL.het_hom_ratio
