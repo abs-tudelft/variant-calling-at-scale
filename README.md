@@ -165,3 +165,20 @@ sudo singularity pull  docker://dancooke/octopus
 gcloud dataproc jobs submit pyspark --region=us-central1 --cluster=cluster-555  --properties=spark.pyspark.python=/usr/bin/python3.6,spark.pyspark.driver.python=/usr/bin/python3.6,spark.executor.memory=2G,spark.driver.memory=2G,spark.num.executors=3,spark.executor.cores=8  gs://bucket_taha_pk/scripts/bwa.py -- --part 3 --ref /mnt/fs_shared/reference/GRCh38.fa  --path /mnt/fs_shared/query/HG003/  --nodes 3 --cores 8 --aligner BWA --vcaller Octopus
 ```
 4. Repeat part `4` for merging VCFs and generating accuracy results using `hap.py` 
+
+DeepVariant:
+```
+ Type Filter  TRUTH.TOTAL  TRUTH.TP  TRUTH.FN  QUERY.TOTAL  QUERY.FP  QUERY.UNK  FP.gt  METRIC.Recall  METRIC.Precision  METRIC.Frac_NA  METRIC.F1_Score  TRUTH.TOTAL.TiTv_ratio  QUERY.TOTAL.TiTv_ratio  TRUTH.TOTAL.het_hom_ratio  QUERY.TOTAL.het_hom_ratio
+ INDEL    ALL        10634     10579        55        21045        24       9984     19       0.994828          0.997830        0.474412         0.996327                     NaN                     NaN                   1.749861                   2.296457
+ INDEL   PASS        10634     10579        55        21045        24       9984     19       0.994828          0.997830        0.474412         0.996327                     NaN                     NaN                   1.749861                   2.296457
+   SNP    ALL        70209     69947       262        85681        85      15619     14       0.996268          0.998787        0.182292         0.997526                2.297347                2.071024                   1.884533                   1.937783
+   SNP   PASS        70209     69947       262        85681        85      15619     14       0.996268          0.998787        0.182292         0.997526                2.297347                2.071024                   1.884533                   1.937783
+```
+Octopus:
+```
+  Type Filter  TRUTH.TOTAL  TRUTH.TP  TRUTH.FN  QUERY.TOTAL  QUERY.FP  QUERY.UNK  FP.gt  METRIC.Recall  METRIC.Precision  METRIC.Frac_NA  METRIC.F1_Score  TRUTH.TOTAL.TiTv_ratio  QUERY.TOTAL.TiTv_ratio  TRUTH.TOTAL.het_hom_ratio  QUERY.TOTAL.het_hom_ratio
+ INDEL    ALL        10634     10586        48        23110        89      11874     22       0.995486          0.992079        0.513804         0.993780                     NaN                     NaN                   1.749861                   2.081653
+ INDEL   PASS        10634     10579        55        20827        18       9670      9       0.994828          0.998387        0.464301         0.996604                     NaN                     NaN                   1.749861                   1.879637
+   SNP    ALL        70209     69909       300        99329       569      29170     34       0.995727          0.991890        0.293671         0.993805                2.297347                1.966237                   1.884533                   2.461922
+   SNP   PASS        70209     69856       353        82612        87      12987     11       0.994972          0.998750        0.157205         0.996858                2.297347                2.147613                   1.884533                   1.920645
+```
