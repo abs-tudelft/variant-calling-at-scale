@@ -4,6 +4,7 @@ cd singularity
 
 singularity pull docker://jmcdani20/hap.py:v0.3.12
 singularity pull docker://dancooke/octopus
+cd ..
 
 mkdir -p tools
 cd tools
@@ -37,6 +38,7 @@ ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/s
 gunzip GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz > GRCh38_no_alt_analysis_set.fasta
 ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai
 mv GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai GRCh38_no_alt_analysis_set.fasta.fai
+cd ..
 
 mkdir -p HG002
 cd HG002
@@ -46,8 +48,9 @@ wget https://cgl.gi.ucsc.edu/data/aws_staging/HG002.novaseq.pcr-free.35x.R2.fast
 
 gunzip HG002.novaseq.pcr-free.35x.R1.fastq.gz
 gunzip HG002.novaseq.pcr-free.35x.R2.fastq.gz
+cd ..
 
-time ${PATH}/bwa index reference/GRCh38_no_alt_analysis_set.fasta
+time ${PATH}/tools/bwa index reference/GRCh38_no_alt_analysis_set.fasta
 
 time ${PATH}/tools/bwa mem -t $(nproc) -R '@RG\tID:sample_lane\tSM:sample\tPL:illumina\tLB:sample\tPU:lane' reference/GRCh38_no_alt_analysis_set.fasta HG002/HG002.novaseq.pcr-free.35x.R1.fastq HG002/HG002.novaseq.pcr-free.35x.R2.fastq > HG002/out.sam
 
