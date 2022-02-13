@@ -15,7 +15,16 @@ cd ..
 git clone https://github.com/lh3/bwa.git
 cd bwa; make
 
-cd /scratch-shared/tahmad/bio_data/short/HG002
+mkdir -p reference
+cd reference
+
+ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz
+gunzip GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.gz > GRCh38_no_alt_analysis_set.fasta
+ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/001/405/GCA_000001405.15_GRCh38/seqs_for_alignment_pipelines.ucsc_ids/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai
+mv GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai GRCh38_no_alt_analysis_set.fasta.fai
+
+mkdir -p HG002
+cd HG002
 
 wget https://cgl.gi.ucsc.edu/data/aws_staging/HG002.novaseq.pcr-free.35x.R1.fastq.gz
 wget https://cgl.gi.ucsc.edu/data/aws_staging/HG002.novaseq.pcr-free.35x.R2.fastq.gz
